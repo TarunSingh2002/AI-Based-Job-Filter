@@ -106,6 +106,8 @@ def _init():
         "jobs_cache":         None,
         "jobs_cache_key":     None,
         "filled_ids":         set(),
+        "sort_field":         "Skill Match",
+        "sort_dir":           "Desc ↓",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -145,6 +147,26 @@ with st.sidebar:
         f"{len(session_jobs)} jobs · "
         f"{session['start'].strftime('%H:%M')} – {session['end'].strftime('%H:%M')} UTC"
     )
+
+    st.divider()
+    st.subheader("↕️ Sort")
+
+    sort_col1, sort_col2 = st.columns(2)
+    with sort_col1:
+        st.session_state.sort_field = st.selectbox(
+            "Sort by",
+            ["Skill Match", "Company Rating", "Posted Date"],
+            index=["Skill Match", "Company Rating", "Posted Date"].index(
+                st.session_state.sort_field),
+            key="_sf",
+        )
+    with sort_col2:
+        st.session_state.sort_dir = st.selectbox(
+            "Order",
+            ["Desc ↓", "Asc ↑"],
+            index=["Desc ↓", "Asc ↑"].index(st.session_state.sort_dir),
+            key="_sd",
+        )
 
     st.divider()
     st.subheader("🔍 Filters")
@@ -234,15 +256,22 @@ def apply_filters(jobs, require_llm):
     return out
 
 
-def triple_sort(jobs):
-    """Sort by: skill match DESC → company rating DESC → posted date DESC (all at once)."""
+def apply_sort(jobs):
+    """Sort by the field and direction chosen in the sidebar."""
+    field = st.session_state.sort_field
+    desc  = st.session_state.sort_dir == "Desc ↓"
+
     def key(j):
-        sm = j.get("skills_match_score") or 0
-        cr = j.get("company_rating") or 0
-        pt = j.get("posted_at") or j.get("scraped_at")
-        ts = pt.timestamp() if pt and hasattr(pt, "timestamp") else 0
-        return (-sm, -cr, -ts)
-    return sorted(jobs, key=key)
+        if field == "Skill Match":
+            return j.get("skills_match_score") or 0
+        elif field == "Company Rating":
+            return j.get("company_rating") or 0
+        elif field == "Posted Date":
+            pt = j.get("posted_at") or j.get("scraped_at")
+            return pt.timestamp() if pt and hasattr(pt, "timestamp") else 0
+        return 0
+
+    return sorted(jobs, key=key, reverse=desc)
 
 
 # ── Compact job card (wrapped in @st.fragment for instant fill) ─────────────────
@@ -372,8 +401,9 @@ if st.session_state.new_processed_flag:
 # ════════════════════════════════════════════════════════════════
 if page == "LLM Processed":
     filtered = apply_filters(all_fresh, require_llm=True)
-    filtered = triple_sort(filtered)
-    st.subheader(f"LLM Processed — {len(filtered)} jobs · sorted by skill match → company → newest")
+    filtered = apply_sort(filtered)
+    direction_label = "highest first" if st.session_state.sort_dir == "Desc ↓" else "lowest first"
+    st.subheader(f"LLM Processed — {len(filtered)} jobs · {st.session_state.sort_field} ({direction_label})")
 
     if not filtered:
         st.info("No processed jobs match your filters.")

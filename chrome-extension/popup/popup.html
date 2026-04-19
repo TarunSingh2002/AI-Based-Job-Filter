@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+
+    <!-- Tab Buttons -->
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="linkedin">LinkedIn</button>
+      <button class="tab-btn" data-tab="naukri">Naukri</button>
+      <button class="tab-btn" data-tab="indeed">Indeed</button>
+      <button class="tab-btn" data-tab="glassdoor">Glassdoor</button>
+      <button class="tab-btn" data-tab="foundit">Foundit</button>
+    </div>
+
+    <!-- ─── LinkedIn Tab ─── -->
+    <div class="tab-content" id="tab-linkedin">
+      <h3>Required Title Keywords (Whitelist)</h3>
+      <textarea id="whitelistKeywords" placeholder="Machine Learning,SQL,AWS"></textarea>
+
+      <h3>Blocked Title Keywords (Blacklist)</h3>
+      <textarea id="titleKeywords" placeholder="intern,teacher,data entry"></textarea>
+
+      <h3>Blocked Company Names</h3>
+      <textarea id="companyNames" placeholder="amazon,abc corp,xyz ltd"></textarea>
+
+      <h3>Additional Filters</h3>
+      <div class="toggle-container">
+        <label class="switch">
+          <input type="checkbox" id="hideApplied">
+          <span class="slider"></span>
+        </label>
+        <span>Hide Applied Jobs</span>
+      </div>
+      <div class="toggle-container">
+        <label class="switch">
+          <input type="checkbox" id="hideDismissed">
+          <span class="slider"></span>
+        </label>
+        <span>Hide Dismissed Jobs</span>
+      </div>
+
+      <h3>Promoted Jobs</h3>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="radio" name="promotedMode" value="show" checked>
+          <span>Show All Promoted</span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="promotedMode" value="hide">
+          <span>Hide All Promoted</span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="promotedMode" value="partial">
+          <span>Partial Hide <span class="radio-hint">(hide only jobs you've already clicked)</span></span>
+        </label>
+      </div>
+
+      <div id="seenPromotedSection" class="hidden">
+        <h3>Seen Promoted Jobs Today</h3>
+        <div id="seenPromotedList" class="seen-list"></div>
+        <button id="clearSeenPromoted" class="btn-danger">🗑️ Clear Seen List</button>
+      </div>
+
+      <button id="saveLinkedIn">Save LinkedIn Filters</button>
+    </div>
+
+    <!-- ─── Naukri Tab ─── -->
+    <div class="tab-content hidden" id="tab-naukri">
+      <h3>Blocked Title Keywords</h3>
+      <textarea id="naukri_blacklistedKeywords" placeholder="manager,senior,lead,testing"></textarea>
+
+      <h3>Blocked Company Names</h3>
+      <textarea id="naukri_blacklistedCompanies" placeholder="soul ai,multicareers,xyz ltd"></textarea>
+
+      <h3>Additional Filters</h3>
+      <div class="toggle-container">
+        <label class="switch">
+          <input type="checkbox" id="naukri_hideSaved">
+          <span class="slider"></span>
+        </label>
+        <span>Hide Saved Jobs</span>
+      </div>
+      <div class="toggle-container">
+        <label class="switch">
+          <input type="checkbox" id="naukri_hidePromoted">
+          <span class="slider"></span>
+        </label>
+        <span>Hide Promoted / Ad Cards</span>
+      </div>
+      <button id="saveNaukri">Save Naukri Filters</button>
+    </div>
+
+    <!-- ─── Indeed Tab ─── -->
+    <div class="tab-content hidden" id="tab-indeed">
+      <h3>Blocked Title Keywords</h3>
+      <textarea id="indeed_blacklistedKeywords" placeholder="intern,manager,data entry"></textarea>
+
+      <h3>Blocked Company Names</h3>
+      <textarea id="indeed_blacklistedCompanies" placeholder="inmobi,ltm,xyz ltd"></textarea>
+
+      <h3>Additional Filters</h3>
+      <div class="toggle-container">
+        <label class="switch">
+          <input type="checkbox" id="indeed_hideSaved">
+          <span class="slider"></span>
+        </label>
+        <span>Hide Saved Jobs</span>
+      </div>
+      <button id="saveIndeed">Save Indeed Filters</button>
+    </div>
+
+    <!-- ─── Glassdoor Tab ─── -->
+    <div class="tab-content hidden" id="tab-glassdoor">
+      <h3>Blocked Title Keywords</h3>
+      <textarea id="glassdoor_blacklistedKeywords" placeholder="intern,manager,data entry"></textarea>
+
+      <h3>Blocked Company Names</h3>
+      <textarea id="glassdoor_blacklistedCompanies" placeholder="inmobi,ltm,xyz ltd"></textarea>
+
+      <h3>Additional Filters</h3>
+      <div class="toggle-container">
+        <label class="switch">
+          <input type="checkbox" id="glassdoor_hideSaved">
+          <span class="slider"></span>
+        </label>
+        <span>Hide Saved Jobs</span>
+      </div>
+      <button id="saveGlassdoor">Save Glassdoor Filters</button>
+    </div>
+
+    <!-- ─── Foundit Tab ─── -->
+    <div class="tab-content hidden" id="tab-foundit">
+      <h3>Blocked Title Keywords</h3>
+      <textarea id="foundit_blacklistedKeywords" placeholder="intern,manager,data entry"></textarea>
+
+      <h3>Blocked Company Names</h3>
+      <textarea id="foundit_blacklistedCompanies" placeholder="inmobi,ltm,xyz ltd"></textarea>
+
+      <h3>Additional Filters</h3>
+      <div class="toggle-container">
+        <label class="switch">
+          <input type="checkbox" id="foundit_hideSaved">
+          <span class="slider"></span>
+        </label>
+        <span>Hide Saved Jobs</span>
+      </div>
+      <button id="saveFoundit">Save Foundit Filters</button>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════
+         SCRAPER BAR — always visible at bottom, outside
+         the scrollable tab area. Shown only on LinkedIn tab.
+         ═══════════════════════════════════════════════════ -->
+    <div id="scraper-bar">
+      <div class="scraper-bar-row">
+        <span class="scraper-label">🕷️ Scraper</span>
+        <span id="scraper-count" class="scraper-count"></span>
+      </div>
+      <div id="scraper-status" class="scraper-status">
+        Ready — click ▶ to scrape visible jobs on this page
+      </div>
+      <div class="scraper-btns">
+        <button id="startScraping" class="btn-scrape">▶ Start Scraping</button>
+        <button id="stopScraping"  class="btn-stop"  style="display:none">⏹ Stop</button>
+      </div>
+    </div>
+
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

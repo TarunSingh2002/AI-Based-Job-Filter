@@ -1,0 +1,470 @@
+{
+  "scraped_date": "2026-04-16",
+  "source": "linkedin",
+  "total": 28,
+  "jobs": [
+    {
+      "job_id": "4402905103",
+      "title": "Python Developer",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "11 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract",
+        "2 of 10 skills matchMatches your job preferences, job type is {}."
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4402905103/",
+      "jd": "About the job\n\nJob Title: Python Developer – AI Trainer\n\nLocation: Remote (United States)\n\n\n\n\nJob Type: Contract\n\n\n\n\nWe’re looking for an experienced Python Developer to collaborate with AI research teams and help train, test, and improve AI models for coding-related tasks. In this role, you’ll combine your software engineering expertise with hands-on experimentation to enhance next-generation AI developer tools.\n\n\n\n\nKey Responsibilities:\n\nDesign, build, and optimize backend systems and APIs using Python.\nReview and evaluate AI-generated code outputs for quality, accuracy, and logic.\nCollaborate with AI engineers and research teams to refine model behavior and development workflows.\nProvide detailed feedback, test results, and issue reports to improve AI performance.\nParticipate in structured testing cycles to assess how AI impacts coding productivity.\nEnsure clean, efficient, and maintainable code aligned with best practices.\nSupport continuous improvement of AI-driven development tools and automation systems.\n\n\n\n\nRequired Skills & Qualifications:\n\n3–8 years of professional experience in Python development.\nStrong understanding of backend systems, APIs, and data structures.\nExperience debugging, optimizing, and validating production-grade code.\nFamiliarity with AI-assisted coding tools (e.g., Cursor, GitHub Copilot, ChatGPT).\nExcellent analytical and problem-solving skills.\nStrong communication skills and ability to provide clear, structured feedback.\nAbility to work independently in a remote, collaborative environment.\n\n\n\n\nPreferred Qualifications:\n\nExperience contributing to AI, automation, or developer tooling projects.\nKnowledge of machine learning concepts or prompt engineering.\nContributions to open-source projects on GitHub or similar platforms.\nInterest in AI innovation and improving the developer experience.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:08.906Z"
+    },
+    {
+      "job_id": "4402525955",
+      "title": "Back End Developer",
+      "company": "ppl3",
+      "location": "APAC (Remote)",
+      "posted": "",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Full-timeMatches your job preferences, job type is Full-time.",
+        "1 of 10 skills matchMatches your job preferences, job type is {}."
+      ],
+      "easy_apply": true,
+      "link": "https://www.linkedin.com/jobs/view/4402525955/",
+      "jd": "About the job\n\nBackend Engineer – Perp DEX\n\nFully Remote\n\n\n\n\nWe’re working with a high-volume perpetuals DEX building core infrastructure for onchain trading.\n\n\n\n\nThey need a backend engineer to help scale a system handling real trading activity — not theory.\n\n\n\n\nThe role:\n\nBuild and scale backend systems powering a live perp exchange\nWork on distributed systems, performance, and reliability\nOwn features end-to-end (design → deploy → iterate)\nCollaborate with a small, fast-moving team\n\n\n\n\nWhat they’re looking for:\n\n3+ years backend engineering experience\nStrong TypeScript / Node.js\nSolid PostgreSQL + SQL experience\nExperience with distributed systems\nComfortable working remotely, async, high ownership\n\n\n\n\nNice to have:\n\nCloud experience (AWS / GCP / Azure)\nDocker / Kubernetes\nWeb3 / DeFi understanding\n\n\n\n\nComp:\n\nUp to $120k USD\nFully remote\nContractor setup\n\n\n\n\nWhy this role:\n\nReal product, real users, real volume\nSmall team → actual ownership and impact\nClean engineering culture, no bureaucracy\nOne of the most active categories in crypto (perps)\n\n\n\n\nIf you want to work on core infra for a live DEX, this is a very strong one.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:11.823Z"
+    },
+    {
+      "job_id": "4402919951",
+      "title": "Software Engineer",
+      "company": "Joveo Ai",
+      "location": "APAC (Remote)",
+      "posted": "8 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Full-timeMatches your job preferences, job type is Full-time.",
+        "0 of 3 skills matchMatches your job preferences, job type is {}."
+      ],
+      "easy_apply": true,
+      "link": "https://www.linkedin.com/jobs/view/4402919951/",
+      "jd": "About the job\n\nAbout Joveo:\n\nEvery company says they're \"AI-first.\" We actually are. Joveo's recruitment\n\nadvertising platform processes millions of hiring decisions through machine\n\nlearning, real-time bidding, and predictive analytics — helping the world's\n\nlargest employers find the right people, faster and fairer. But we're not\n\ndone. Not even close.\n\n\n\n\nRole Overview:\n\nWe are hiring a Software Engineer to design, build, and maintain scalable\n\nsoftware systems that power our global recruitment advertising infrastructure.\n\nYou will collaborate with cross-functional teams to ship high-quality,\n\nproduction-grade code across the full development lifecycle.\n\n\n\n\nKey Responsibilities:\n\n- Design, develop, and maintain backend and/or frontend software systems\n\n- Write clean, tested, and well-documented code aligned with team standards\n\n- Participate in architecture discussions and contribute to technical decisions\n\n- Debug and resolve production issues with speed and precision\n\n- Collaborate with product, design, and data teams in agile sprint cycles\n\n- Conduct and participate in code reviews to maintain engineering quality\n\n\n\n\nRequired Skills & Qualifications:\n\n- Proficiency in one or more programming languages (e.g., Python, Java, Go, JavaScript)\n\n- Experience building and maintaining scalable, distributed systems\n\n- Solid understanding of data structures, algorithms, and system design\n\n- Familiarity with cloud platforms (AWS, GCP, or Azure)\n\n- Experience with version control systems (Git) and CI/CD pipelines\n\n- Strong problem-solving skills and a collaborative engineering mindset\n\n\n\n\nEqual Opportunity Employer:\n\nJoveo is an equal opportunity employer. We are committed to building an\n\ninclusive workplace and welcome applications from all qualified individuals\n\nregardless of race, color, ethnicity, nationality, gender, gender identity\n\nor expression, sexual orientation, age, religion, disability, marital status,\n\nor any other characteristic protected by applicable law. All hiring decisions\n\nare made solely on the basis of qualifications, skills, and demonstrated\n\nability.\n\n\n\n\nIf your dream job is one that doesn't fit neatly into a job title — apply.\n\nJoveo. Where AI meets the future of work.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:15.294Z"
+    },
+    {
+      "job_id": "4400164863",
+      "title": "GPU / CUDA Engineer",
+      "company": "Bespoke Labs",
+      "location": "APAC (Remote)",
+      "posted": "10 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract"
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4400164863/",
+      "jd": "About the job\n\nAbout Bespoke Labs\n\nBespoke Labs is a VC-backed applied AI research startup in Mountain View, CA, building core infrastructure and RL environments to train and evaluate intelligent agents. Home of OpenThoughts (100K+ monthly downloads, 200+ models trained) and Terminal Bench, a leading agentic coding benchmark used by frontier labs. Founded by ex-Google DeepMind and UC Berkeley faculty, advised by Jeff Dean.\n\n\n\n\nThe Role\n\nYou'll write, optimize, and debug CUDA kernels that directly power our AI systems — from training and inference to RL workloads. You'll also build the tooling (profilers, inference engines, benchmarks) that keep our systems at peak performance.\n\n\n\n\nWhat You'll \n\nDoWrite and optimize CUDA kernels for GEMM, attention, MoE, and graph operations\nUse PTX assembly and architecture-specific techniques for Hopper/Blackwell hardware\nApply memory coalescing, warp-level programming, tensor cores, and compute/memory overlap\nIntegrate kernels into PyTorch, vLLM, Megatron, and TorchTitan\nProfile and debug with Nsight Systems, Nsight Compute, and Torch Profiler\nBuild internal tooling and contribute to open-source GPU libraries\n\n\n\n\nWhat We Need Must Have\n\nHands-on CUDA kernel optimization experience (kernel hacking strongly preferred)\n\nStrong grasp of GPU architecture — memory hierarchy, warp execution, synchronization\nProficient in C/C++ for high-performance systems\nExperience in profiling and resolving GPU bottlenecks\n\nNice to Have\n\nFlash Attention or Transformer kernel optimization\nCutlass, Triton, Thrust, or CUB experience\nDistributed/multi-GPU (NVLink, NCCL) background\nOpen-source GPU contributions or published research\n\n\n\n\nWhy Join\n\n\n\n\nHigh ownership. Frontier research. Real production impact. A small, elite team is building the infrastructure that the next generation of AI runs on",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:18.201Z"
+    },
+    {
+      "job_id": "4374297689",
+      "title": "Performance Engineer, Backend",
+      "company": "Automattic",
+      "location": "APAC (Remote)",
+      "posted": "",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Full-timeMatches your job preferences, job type is Full-time."
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4374297689/",
+      "jd": "About the job\n\nAutomattic’s products—WordPress.com, WooCommerce, Beeper, Tumblr, Jetpack, and more—serve tens of billions of page views every month from data centers around the world. The PerfOps team exists to make those page views as quickly as possible. As a Backend Performance Engineer, you’ll dive deep into query plans, cache hit ratios, and PHP profiling data to find the milliseconds that matter at our scale. You’ll work across the full Automattic product portfolio: if it runs on our backend, it’s your playground.\n\nThis is an opportunity to do performance work where the impact is immediate and enormous. You’ll collaborate with product engineers, systems engineers, and network operations, bringing a performance-first mindset to architecture decisions, code reviews, and incident response. If you love the puzzle of why something is slow and get satisfaction from making it measurably faster, this role was made for you.\n\nResponsibilities:\n\n\nIdentifying and eliminating backend performance bottlenecks by profiling PHP applications, analyzing MySQL/MariaDB query performance, and optimizing Memcached usage across Automattic’s products.\nBuilding and improving performance observability—developing dashboards, instrumentation, and automated detection that surface regressions before they reach production, and give engineering teams clear, actionable data.\nPartnering with product and platform engineers to review code and architecture through a performance lens, advocating for efficient database access patterns, caching strategies, and backend design decisions.\nRaising the performance bar across engineering by documenting best practices, contributing to internal guidelines for PHP and database performance, and mentoring teams on how to write backend code that scales.\nProactively searching out performance issues and working to resolve them.\nDeep dives on individual sites, working alongside support staff and engineers to address customer performance issues.\n\n\nRequirements:\n\n\nDeep hands-on experience with PHP performance: you can profile a PHP application, identify hot paths, and reason about memory usage and execution time at the code level.\nStrong understanding of caching layers and strategies: you know how to design and debug Memcached (or similar) caching patterns, understand cache invalidation trade-offs, and can reason about when and where caching helps versus hides problems.\nExperience doing performance work at scale: you’ve worked on systems serving millions of requests where small inefficiencies compound into real problems, and you understand the difference between optimizing on a benchmark and optimizing under production load.\nAbility to instrument, measure, and prove: you don’t guess, you measure. You have experience building or using profiling tools, APM systems, and performance dashboards to turn hunches into data and verify that a fix actually worked.\nExcellent written communication skills: Automattic is a distributed, async-first company. You’ll need to clearly explain complex performance findings, write up proposals, and influence engineering decisions through writing, not meetings.\nSelf-direction and ownership: you can identify the highest-impact performance work, prioritize it, drive it to completion, and hold yourself accountable without waiting for someone to assign it to you.\nBonus points for hands-on experience with WordPress and WooCommerce in high-traffic production environments\n\n\nSalary range: $70,000-$170,000 USD. Please note that salary ranges are global, regardless of location, and we pay in local currency.\n\nWe are searching for high-caliber candidates with the skills and qualities to have a net positive for Automattic. Pay will reflect the potential contribution and the impact you can bring, which may, in some cases, go beyond the range stated.\n\nThis isn’t your typical work-from-home job—we are a fully-remote company with an open vacation policy. Read more about our compensation philosophy. To see a full list of benefits by country, consult our Benefits Page. And check out these links to learn more about How We Hire and What We Expect from Ourselves.\n\nABOUT AUTOMATTIC\n\nNow in our 20th year, we’re the people behind WordPress.com, WooCommerce, Beeper, Tumblr, Simplenote, Jetpack, Longreads, Day One, PocketCasts, and more. We believe in making the web a better place.\n\nWe’re a distributed company with more than 1500 Automatticians in nearly every corner of the globe, speaking over a hundred different languages. Enriched by this diversity, we’re united by a singular mission: to democratize publishing, commerce, and messaging so anyone with a story can tell it, anyone with a product can sell it, and everyone can manage their communications from a single source. In short, we help maintain a balance in society, creating and continually refining powerful tools people can use to compete fairly—regardless of income, gender, politics, language, or where they live in the world.\n\nWe believe in Open Source, and the vast majority of our work is available under the GPL. Automattic is a Most Loved Company, an Equal Opportunity employer, and Disability Confident Committed. (Here’s what that might mean for you.) If you need disability-related accommodations during the application or interview process, please fill out this form. We are committed to ensuring an accessible hiring process for all candidates. Learn more about our Employee Resource Groups.\n\nYou can track your application status and more at MyGreenhouse.\n\nTo learn about how we handle your data, please review our Privacy Policy.\n\nAll qualified applicants will receive consideration for employment without regard to race, color, religion, sex, sexual orientation, gender identity, national origin, disability, or status as a protected veteran. View the “Know Your Rights: Workplace Discrimination is Illegal” poster here. Automattic participates in the E-Verify program in certain locations, as required by law.\n\nJob Details\n\n1 Open position\n\n Apply Now \n\nNot finding the right opportunity?\n\nCheck out our interest forms and register your details. We are always open to talented people who would like to join Automattic.\n\nGet in touch",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:22.510Z"
+    },
+    {
+      "job_id": "4401846825",
+      "title": "Information Technology Support Engineer",
+      "company": "Chative",
+      "location": "APAC (Remote)",
+      "posted": "11 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Full-timeMatches your job preferences, job type is Full-time.",
+        "0 of 4 skills matchMatches your job preferences, job type is {}."
+      ],
+      "easy_apply": true,
+      "link": "https://www.linkedin.com/jobs/view/4401846825/",
+      "jd": "About the job\n\nAbout the Role\n\nWe are looking for a proactive and detail-oriented IT Support Specialist to join our team. This is an intermediate-level role suited for someone who brings hands-on experience in end-user support and device management, and who is equally comfortable optimising workflows and driving operational improvements. You will serve as a key point of contact for all internal IT matters, ensuring our staff are equipped with the right tools, systems, and support to perform at their best.\n\n\n\n\nBeyond day-to-day support, we expect you to take ownership of identifying inefficiencies, automating repetitive processes, and continuously improving how IT services are delivered across the organisation.\n\nKey Responsibilities\n\nDevice & Endpoint Management\n\nProvision, configure, and deploy laptops, desktops, mobile devices, and peripherals for new and existing staff.\n\nMaintain an accurate and up-to-date asset inventory for all hardware and software.\n\nManage device lifecycle, including procurement coordination, setup, maintenance, and decommissioning.\n\nAdminister endpoint management platforms (e.g., MDM/UEM solutions such as Jamf, Intune, or similar).\n\nSoftware & Licence Management\n\nManage software licences across the organisation, ensuring compliance and cost efficiency.\n\nOversee software provisioning and de-provisioning tied to employee onboarding and offboarding.\n\nMonitor licence utilisation and provide recommendations for renewals, consolidations, or replacements.\n\nIT Support & Helpdesk\n\nProvide prompt and effective technical support to staff for hardware, software, network, and account-related issues.\n\nTriage and resolve helpdesk tickets in a timely manner, escalating where necessary.\n\nMaintain clear documentation of issues, resolutions, and recurring problems.\n\nSupport meeting room AV setups and troubleshoot collaboration tools (e.g., Zoom, Google Meet, Slack).\n\nCross-Functional Collaboration\n\nLiaise with internal teams and external vendors to manage IT-related workflows, procurement, and service agreements, audits.\n\nAct as an IT point of contact for onboarding coordination, working closely with HR and department leads.\n\nCommunicate clearly with non-technical stakeholders on IT policies, changes, and updates.\n\nWorkflow Optimisation & Automation\n\nProactively identify repetitive manual IT processes and design or implement automation solutions (e.g., using tools such as Zapier, Make, PowerShell scripting, or similar).\n\nDevelop and maintain internal runbooks, SOPs, and IT documentation to improve team efficiency and institutional knowledge.\n\nPropose and lead small-scale IT improvement initiatives that reduce friction for staff and strengthen operational resilience.\n\nSecurity & Compliance\n\nEnforce IT security policies including access control, multi-factor authentication, and software update compliance.\n\nAssist in onboarding and offboarding processes from an access management perspective.\n\nSupport routine security audits and contribute to maintaining a secure IT environment.\n\n\n\n\nRequirements\n\nExperience & Skills\n\n2–4 years of experience in an IT support, helpdesk, or systems administration role.\n\nSolid experience with device management — both macOS and Windows environments.\n\nHands-on experience with MDM platforms (e.g., Jamf Pro, Microsoft Intune) or similar endpoint management tools.\n\nFamiliarity with identity and access management tools (e.g., Google Workspace Admin, Microsoft Entra ID / Azure AD, Okta).\n\nExperience managing SaaS application licences and vendor relationships.\n\nBasic scripting or automation skills (e.g., PowerShell, Bash, or workflow automation tools such as Zapier or Make).\n\nStrong troubleshooting skills across hardware, OS, networking, and software issues.\n\nAttributes\n\nSelf-motivated, with a proactive mindset — you look for problems before they arise.\n\nStrong communicator who can explain technical concepts clearly to non-technical colleagues.\n\nOrganised and methodical, with good documentation habits.\n\nCollaborative and approachable, yet able to work independently and manage priorities.\n\nContinuous improvement mindset — you are not satisfied with \"it works,\" you ask \"how can it work better?\"\n\n\n\n\nNice to Have\n\nExperience with IT ticketing systems (e.g., Jira Service Management, Freshservice, Zendesk).\n\nFamiliarity with network fundamentals (VPN, DNS, DHCP, firewall basics).\n\nExposure to security frameworks or certifications (e.g., CompTIA Security+, ISO 27001 awareness).\n\nExperience in a fast-paced startup or scale-up environment.\n\n\n\n\nWhat We Offer\n\nA collaborative and supportive team environment.\n\nOpportunities to take initiative and drive real improvements in how the organisation operates.\n\nExposure to a wide range of technologies and cross-functional work.\n\nCompetitive compensation commensurate with experience.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:26.042Z"
+    },
+    {
+      "job_id": "4401494930",
+      "title": "IT Support Engineer",
+      "company": "TheSoul Group",
+      "location": "APAC (Remote)",
+      "posted": "19 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Full-timeMatches your job preferences, job type is Full-time."
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4401494930/",
+      "jd": "About the job\n\nTheSoul Group is a leading creator business platform positioned at the heart of the creator economy. Our original videos, animations, and editorial stories inspire audiences in 21 languages, across 60 platforms and 20 websites.\n\n\n\n\nTogether with our network of 15,000 talented creators, we reach over 5 billion followers and generate more than 100 billion monthly views on social media.\n\n\n\n\nAs a global powerhouse in digital media, we drive viral success for creators and brands worldwide through a wide range of services, leveraging our expertise in content distribution, localization, and social media management. We’re the creators behind global phenomena such as 5-Minute Crafts and BrightSide, and we continue to expand our influence in the creator economy through strategic acquisitions like Mediacube and Underscore Talent.\n\n\n\n\nWe’re a dynamic, remote-first global team, fostering award-winning creativity, a no-red-tape approach, and great vibes!\n\n\n\n\nWe are looking for an IT Support Engineer to investigate and resolve issues across our internal systems and global products. The ideal candidate will maintain and enhance our knowledge base with clear, structured documentation, ensuring efficient knowledge sharing across teams. You will be responsible for managing user access in line with security policies, performing regular subscription and service audits, and contributing to process improvements.\n\n\n\n\nResponsibilities\n\nInvestigate and resolve issues related to internal and global products.\nMaintain and update the internal knowledge base with clear, structured documentation of solutions.\nManage user access provisioning in accordance with established security policies and procedures.\nPerform subscription and service audits.\nDesign and develop AI-driven tools.\n\n\n\n\nRequirements\n\nMinimum of 2 years’ experience in technical support, system administration, access management, or a related field.\nStrong analytical thinking and problem-solving abilities.\nSolid understanding of access management principles, including user lifecycle management (provisioning, modification, and deprovisioning).\nKnowledge of role-based access control (RBAC) and least-privilege principles.\nBasic proficiency in Python (or another programming language) and SQL.\nExperience with AI development is considered an advantage.\n\n\n\n\nBenefits\n\nFlexible Engagement Structure: This opportunity is offered under an independent service-provider agreement, giving you the freedom to shape how you deliver your expertise. You define your own working methods, organise your schedule independently, and contribute your skills to clearly scoped projects. Compensation is agreed individually and reflects your experience, capabilities, and the value you bring to each engagement.\nLocation Freedom: You can deliver services from any suitable location that supports high-quality outcomes, whether that’s your home office, a co-working space, or wherever you feel most productive and inspired. What matters most is the impact you create and the reliability of your delivery.\nGlobal Network and Inspiring Projects: You’ll collaborate with a diverse international network of professionals across 85+ countries, contributing to projects that reach vast audiences and help shape the future of digital content. This is an opportunity to work alongside talented specialists, exchange ideas, and be part of meaningful initiatives with real global reach.\nSmooth Collaboration and Project Support: To enable efficient service delivery, we provide modern collaboration platforms, clear project coordination, and streamlined processes. This helps you focus your energy where it matters most, producing high-impact work and bringing creative solutions to life.\nMake a Global Impact: Your expertise will contribute to initiatives that influence audiences worldwide. Join projects that push creative boundaries and help build the next generation of digital experiences.\n\n\n\n\nWe appreciate your interest in our job opportunities and our company. Our team carefully evaluates each application to identify the most suitable candidates for the role. Due to the high volume of applications received, we may not be able to respond to every applicant. However, if your qualifications align with our requirements, we will contact you to discuss the next steps in the selection process.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:28.944Z"
+    },
+    {
+      "job_id": "4402904150",
+      "title": "Golang Developer",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "11 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract",
+        "0 of 1 skills matchMatches your job preferences, job type is {}."
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4402904150/",
+      "jd": "About the job\n\nJob Title: Golang Developer\n\nLocation: Remote\n\n\n\n\nJob Type: Contract (Part-time)\n\n\n\n\nJoin our customer's team as an experienced Backend Developer specializing in Go. In this high-impact, remote role, you'll design, implement, and continually improve robust backend APIs while collaborating with cutting-edge AI research. You'll help test and shape the next generation of developer tools alongside a high-caliber engineering group.\n\n\n\n\nKey Responsibilities:\n\nDesign, develop, and optimize REST and GraphQL endpoints for scalable APIs.\nDrive data validation, error handling, and security best practices within backend services.\nPlan and execute database migrations, optimizations, and schema changes as needed.\nActively test new AI-powered models in Cursor, providing actionable feedback via incident reports, bug traces, and screenshots.\nParticipate in 4-day intensive testing bursts, exploring how AI models impact real coding workflows.\nEngage thoughtfully with the research team in a dedicated Slack channel to discuss findings and propose improvements.\nSubmit detailed post-burst surveys, delivering insights on model performance and developer experience.\n\n\n\n\nRequired Skills and Qualifications:\n\n3+ years of professional experience as a backend developer, with strong expertise in Go (Golang).\nProficient in building and maintaining RESTful and GraphQL APIs.\nAdvanced understanding of backend data validation, error handling, and API security.\nHands-on experience with database migrations, performance tuning, and schema design.\nExtensive use of AI tools for coding; familiarity with Cursor is highly desirable.\nOutstanding written and verbal communication skills, with a knack for clear incident and bug reporting.\nProven ability to thrive in fast-paced, confidential, and collaborative remote environments.\n\n\n\n\nPreferred Qualifications:\n\nVisible contributions to open source (e.g., GitHub stars or contributions).\nExperience designing or evaluating experimental tooling and developer workflows.\nDemonstrated enthusiasm for AI advancements in software development.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:31.868Z"
+    },
+    {
+      "job_id": "4401854560",
+      "title": "Speech & Voice Specialist (AI) | Remote",
+      "company": "Crossing Hurdles",
+      "location": "APJ (Remote)",
+      "posted": "11 hours ago",
+      "work_type": [
+        "$40/hr - $70/hr",
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract"
+      ],
+      "easy_apply": true,
+      "link": "https://www.linkedin.com/jobs/view/4401854560/",
+      "jd": "About the job\n\nPosition: Voice Coach\n\nType: Hourly contract\n\nCompensation: $40 - $70/hour\n\nLocation: Remote\n\nCommitment: 10–40 hours/week\n\n\n\n\nRole Responsibilities\n\nDirect and evaluate AI-generated voice performances for accuracy and expressiveness.\nProvide guidance on accents, dialects, and pronunciation for voice models.\nCollaborate with developers and designers to refine voice synthesis systems.\nDevelop best practices for modulation, tone, and emotional delivery.\nDeliver targeted feedback to improve voice quality and performance.\nDocument analysis and communicate insights clearly to stakeholders.\nParticipate in pilot sessions to ensure high-quality audio outputs. \n\n\n\n\nRequirements\n\nStrong experience in voice coaching, voice acting, or dialect training.\nStrong expertise in voice directing and audio performance evaluation.\nExcellent written and verbal communication skills with attention to detail.\nStrong understanding of phonetics, speech patterns, and linguistic nuances.\nAbility to provide clear, actionable feedback in fast-paced environments.\nAbility to work remotely and collaborate with cross-functional teams.\nPassion for voice technology and AI-driven audio innovation. \n\n\n\n\nApplication Process (Takes 20 Min)\n\nEasy Apply on LinkedIn\nCheck email for next steps\nParticipate in resume evaluation & interview stage\n\n\n\nDesired Skills and Experience\n\nEnglish fluency, Voice Coach",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:35.001Z"
+    },
+    {
+      "job_id": "4401858814",
+      "title": "Freelance English Dialogue List Transcriber",
+      "company": "Iyuno",
+      "location": "APAC (Remote)",
+      "posted": "10 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Part-time",
+        "0 of 2 skills matchMatches your job preferences, job type is {}."
+      ],
+      "easy_apply": true,
+      "link": "https://www.linkedin.com/jobs/view/4401858814/",
+      "jd": "About the job\n\nAs a Dialogue List Transcriber, you'll be responsible for:\n\nDialogue List Creation: Create list of dialogue and non-dialogue elements of a script.\nAccuracy: Make sure the timecodes match with the script and the lip movement in every scene, not too fast but not too late either.\nContinuous Learning: Embracing new challenges and adapting gracefully.\nPressure-Pro Handling: Thriving in a dynamic, fast-paced environment.\n\n \n\nTask Summary:\n\nCreate Timecodes (Timecode In, Timecode Out) and Dialogues (verbatim) by each character name.\nIdentify the speaker or character names.\nInsert human sound descriptions that is produced orally.\nTranscribe visible plot-pertinent on-screen text & narrative title.\nIdentify whether it is On-Screen Text, Narrative Title, Main and Ends, Song, or Ditties.\n\n \n\nQualifications:\n\nGood command of English.\nHave good listening skills and high attention to detail on graphics.\nHigh attention on project details and storyline on identifying graphic relevance.\nFamiliar with various TV series and movies, culture would be advantageous.\nPrevious experience in transcription is preferred.\nCommitment every Monday, 11am to 3pm SGT.\n\n \n\nConditions:\n\nThis is a freelance position with no limitation as to the location.\nHowever, applicant must have access to a stable internet connection (required to work on a cloud-based environment).\nPayment is made via PayPal or Payoneer within 30 days of receiving the original invoice (non-negotiable).\n\n \n\nIf you wish to apply for the position above, please click apply and we will get back to you!\n\n \n\nIf you have any questions, don't hesitate to get in touch with us via email at resource@iyuno.com.\n\n \n\nThank you in advance for your consideration!",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:37.794Z"
+    },
+    {
+      "job_id": "4402913105",
+      "title": "Artificial Intelligence Engineer",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "10 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Part-time"
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4402913105/",
+      "jd": "About the job\n\nJob Title: AI Engineer\n\n\n\n\nJob Type: Contractor (Part time)\n\n\n\n\nLocation: Remote\n\n\n\n\nJob Summary:\n\nJoin our customer's team as an AI Engineer and play a pivotal role in designing and deploying cutting-edge AI solutions. This is a unique opportunity for seasoned professionals to work remotely, collaborating with a team that values innovation, expertise, and clear communication.\n\n\n\n\nKey Responsibilities:\n\nDesign, implement, and optimize large language model (LLM) solutions using Python.\n\nCollaborate with cross-functional experts to identify and solve real-world AI challenges.\n\nDevelop scalable machine learning pipelines for training, fine-tuning, and inference.\n\nEvaluate the performance of AI models, troubleshoot issues, and propose effective improvements.\n\nDocument processes and results clearly, ensuring high standards of written communication.\n\nStay abreast of developments in AI, suggesting novel approaches and tools to enhance team capabilities.\n\nCommunicate technical concepts to both technical and non-technical stakeholders with clarity.\n\n\n\n\nRequired Skills and Qualifications:\n\nMinimum of 3+ years hands-on experience as an AI Engineer, with a strong track record of delivering AI-driven products.\n\nExpertise in Python and working knowledge of libraries relevant to machine learning and LLMs.\n\nDeep understanding of large language models, including fine-tuning and deployment practices.\n\nProven ability to communicate thoughtfully and effectively, both in writing and verbally.\n\nExperience working collaboratively in remote, distributed teams.\n\nStrong problem-solving and analytical skills with a high attention to detail.\n\nSelf-motivated, proactive, and passionate about advancing AI technologies.\n\n\n\n\nPreferred Qualifications:\n\nAdvanced degree in Computer Science, Data Science, or a related field.\n\nExperience with cloud platforms and MLOps pipelines.\n\nContributions to open-source AI projects or research publications.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:40.690Z"
+    },
+    {
+      "job_id": "4191117617",
+      "title": "Experienced Software Engineer",
+      "company": "Automattic",
+      "location": "APAC (Remote)",
+      "posted": "",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Full-timeMatches your job preferences, job type is Full-time."
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4191117617/",
+      "jd": "About the job\n\nWordPress doesn’t try to keep its users inside walled gardens, a rare thing in a world that is dangerously moving away from the open web. Instead, WordPress gives them the freedom to build a business website, an online store, or a personal blog – the way they like it. Big sites or small, using the community-run open source project or Automattic’s WordPress.com, vanilla or customized with hundreds of plugins, WordPress users always get to own and control their data, their expression, and their freedom.\n\nWe’re always looking for talented and experienced engineers worldwide, excited to help Automattic’s product ecosystem, and join our mission to make the web a better place.\n\nWhat have we worked on recently?\n\n\nAI is at the heart of many new product developments and powers a lot of our day-to-day development workflows.\nWooCommerce is the most popular and most flexible e-commerce platform on the web. We’re working tirelessly on giving you all the control, while keeping the platform fast and stable.\nGutenberg is a new block-level editor for WordPress with clean abstractions for users, too, not just developers.\nTumblr is a microblogging social network where users create, share, and follow what they love.\nTo view more of our recent work, check out our longer product list on Automattic.com.\n\n\nHow do we work?\n\n\nWe’re kind to each other and our users – we build a positive, supportive, and inclusive culture of cohesive teams focused on building useful products for our customers.\nWe work as a global and distributed workforce resulting in a unique way of working built around our creed. \nWe offer flexible work arrangements allowing our team members to work when they feel best.\nWe open-source! We’re cool with open-sourcing everything except passwords, or secret keys.\nWe ship often, deploying many times daily with the help of peer code review, continuous integration, and our global workforce in over 70 countries.\nWe welcome collaboration, and you can be involved in any discussion across our many communication channels.\nWe encourage you to learn and develop and we support you with what you need – covering expenses, easy internal mobility, coaching.\n\n\nEnough about us, let‘s talk more about you. Working at Automattic might be a good fit if:\n\n\nYou care and often obsess over the quality and the details of your work.\nDebugging any problem is a fun challenge and not a chore.\nUnderstanding the layers of abstraction below and above your work isn’t something extra, but how you operate.\nYou have production experience with several programming languages, frameworks, and paradigms. We mostly use PHP and JavaScript at Automattic, we expect you to be comfortable with the idea of becoming an expert in these languages, even if being one isn’t a requirement to apply.\nIn your mind abstraction is associated as much with cost as it is with value.\nYou have experience working at scale – it can be on the backend and performance side, or via the complexity of interacting with a multi-million diverse userbase.\nAre open and able to travel 3-4 weeks per year to meet up with your teammates in person.\n\n\n\nThese are exciting times at Automattic and you’ll have a unique opportunity to shape the future of our products. Join us! We look forward to hearing from you.\n\nCurious who works in engineering at Automattic? Meet our Code Wranglers – Brandon, Jeremy, Mark, Jennifer, Roy and Kat!\n\nWhat to Expect:\n\nWe know applying to jobs can be stressful and we want to ease the stress by giving clear expectations upfront about our process. We’ve outlined everything you need to know here including all of the steps in the process as well as how we approach hiring.\n\nPlease note that we are paying extra attention to your answers to the questions in the application form. They are a significant part of the hiring process, and we will review them just like we would review any other step of the hiring process. We’re always iterating so if you happen to join us in the process, please feel free to offer feedback on what else we can include there!\n\nSalary range: $70,000-$170,000 USD. Please note that salary ranges are global, regardless of location, and we pay in local currency.\n\nWe are searching for high-caliber candidates with the skills and qualities to have a net positive for Automattic. Pay will reflect the potential contribution and the impact you can bring, which may, in some cases, go beyond the range stated.\n\nWe’re pleased to offer a straightforward, competitive base salary, providing financial clarity without complex variable components. This isn’t your typical work-from-home job: we are a fully-remote company with an open vacation policy. To see a full list of benefits by country, consult our Benefits Page. And check out these links to learn more about How We Hire and What We Expect from Ourselves.\n\nABOUT AUTOMATTIC\n\nNow in our 20th year, we’re the people behind WordPress.com, WooCommerce, Beeper, Tumblr, Simplenote, Jetpack, Longreads, Day One, PocketCasts, and more. We believe in making the web a better place.\n\nWe’re a distributed company with more than 1500 Automatticians in nearly every corner of the globe, speaking over a hundred different languages. Enriched by this diversity, we’re united by a singular mission: to democratize publishing, commerce, and messaging so anyone with a story can tell it, anyone with a product can sell it, and everyone can manage their communications from a single source. In short, we help maintain a balance in society, creating and continually refining powerful tools people can use to compete fairly—regardless of income, gender, politics, language, or where they live in the world.\n\nWe believe in Open Source, and the vast majority of our work is available under the GPL. Automattic is a Most Loved Company, an Equal Opportunity employer, and Disability Confident Committed. (Here’s what that might mean for you.) If you need disability-related accommodations during the application or interview process, please fill out this form. We are committed to ensuring an accessible hiring process for all candidates. Learn more about our Employee Resource Groups.\n\nYou can track your application status and more at MyGreenhouse.\n\nTo learn about how we handle your data, please review our Privacy Policy.\n\nAll qualified applicants will receive consideration for employment without regard to race, color, religion, sex, sexual orientation, gender identity, national origin, disability, or status as a protected veteran. View the “Know Your Rights: Workplace Discrimination is Illegal” poster here. Automattic participates in the E-Verify program in certain locations, as required by law.\n\nJob Details\n\nMultiple\n\nCategory\n\nEngineering\n\n Apply Now \n\nNot finding the right opportunity?\n\nCheck out our interest forms and register your details. We are always open to talented people who would like to join Automattic.\n\nGet in touch",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:44.728Z"
+    },
+    {
+      "job_id": "4402693947",
+      "title": "Rust Developer",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "11 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract",
+        "0 of 2 skills matchMatches your job preferences, job type is {}."
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4402693947/",
+      "jd": "About the job\n\nJob Title: Rust Developer\n\nJob Type: Part time (Contract)\n\nLocation: Remote \n\n\n\n\nJoin our customer’s team as an experienced Backend Developer. In this high-impact, remote role, you’ll design, implement, and enhance robust backend APIs while collaborating with teams advancing AI research and model development. You’ll play a key role in testing and improving AI-powered developer tools, shaping the next generation of intelligent software systems.\n\n\n\n\nKey Responsibilities:\n\nDesign, develop, and optimize REST and GraphQL endpoints for scalable APIs.\nImplement strong data validation, error handling, and security best practices across backend services.\nPlan and execute database migrations, optimizations, and schema changes as needed.\nTest new AI-powered models in Cursor, providing detailed feedback via incident reports, bug traces, and screenshots.\nParticipate in intensive testing cycles, evaluating how AI models impact real-world coding workflows.\nCollaborate with the research team on Slack, discussing findings and suggesting improvements.\nSubmit comprehensive surveys and reports to enhance product and model performance.\n\n\n\n\nRequired Skills and Qualifications:\n\n5+ years of professional experience as a Backend Developer with strong expertise in Rust.\nProven experience building and maintaining RESTful and GraphQL APIs.\nDeep understanding of backend data validation, error handling, and API security.\nHands-on experience with database migrations, query optimization, and schema design.\nPractical use of AI-assisted coding tools; familiarity with Cursor is highly desirable.\nExcellent written and verbal communication skills, especially in reporting and documentation.\nAbility to thrive in a fast-paced, confidential, and collaborative remote environment.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:47.478Z"
+    },
+    {
+      "job_id": "4401489055",
+      "title": "Software Developer",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "23 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract"
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4401489055/",
+      "jd": "About the job\n\nJob Title: Software Developer\n\nJob Type: Part -time\n\nLocation: Remote\n\n\n\n\nJob Summary:\n\nJoin our customer's team as a Software Developer, where innovation, ownership, and technical expertise drive every project. You’ll collaborate with a dynamic and diverse team to design, develop, and deliver robust solutions using modern programming languages and full-stack technologies. If you are passionate about building scalable applications and thrive in a remote and communicative environment, we want to hear from you.\n\n\n\n\nKey Responsibilities:\n\nDesign, implement, and maintain scalable back-end and full-stack applications using Python, Rust, GoLang, Java, or Node.js.\nCollaborate closely with cross-functional team members to deliver high-quality software solutions that meet evolving business requirements.\nWrite clean, efficient, and well-documented code, following best software engineering practices.\nTroubleshoot, debug, and optimize existing codebases to improve performance and reliability.\nParticipate in code reviews, technical discussions, and architectural planning to drive continuous improvement.\nContribute to the full software development lifecycle, from concept and design to testing and deployment.\nMaintain clear, concise, and thoughtful written and verbal communication across distributed teams.\n\n\n\n\nRequired Skills and Qualifications:\n\n3+ years of hands-on experience in software development with one or more of the following: Python, Rust, GoLang, Java, Node.js, or full-stack development (backend or full-stack).\nProficiency in building scalable, reliable, and maintainable software systems.\nExperience working in remote, collaborative, and agile environments.\nExpertise in modern development tools, version control systems, and CI/CD pipelines.\nStrong problem-solving skills with keen attention to detail.\nExcellent written and verbal communication skills, with a high standard for clarity and professionalism.\nSelf-driven, proactive, and able to work independently in a distributed setting.\n\n\n\n\nPreferred Qualifications:\n\nExperience with cloud platforms such as AWS, GCP, or Azure.\nKnowledge of DevOps principles and containerization technologies.\nBackground in mentoring or leading small engineering teams.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:50.182Z"
+    },
+    {
+      "job_id": "4400415802",
+      "title": "Casino Product & Integrity Analyst",
+      "company": "BettingJobs",
+      "location": "APAC (Remote)",
+      "posted": "2 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Full-timeMatches your job preferences, job type is Full-time."
+      ],
+      "easy_apply": true,
+      "link": "https://www.linkedin.com/jobs/view/4400415802/",
+      "jd": "About the job\n\nBettingJobs is thrilled to collaborate with our client, a prominent online bookmaker known for transforming the sports betting and gaming industry, in their search for a Casino Product & Integrity Analyst to join their team based remotely in Asia.\n\n\n\n\nResponsibilities:\n\nReview large wins and withdrawals to identify unusual gameplay patterns, potential abuse, or coordinated betting behaviour\nAnalyse gameplay behaviour and betting patterns to detect anomalies, opposite betting, and fraud indicators\nMonitor bonus usage and identify bonus abuse patterns, supporting optimization of promotional mechanics and bonus structures\nAnalyse casino game performance and trends, including RTP deviations, volatility patterns, and player engagement behaviour\nInvestigate vendor escalation cases by reviewing gameplay data and identifying suspicious activity patterns\nWork with casino vendors on escalations and gameplay feedback, providing insights on suspicious patterns, game behaviour, and potential configuration improvements.\nAnalyse affiliate traffic behaviour to detect coordinated activity or unusual behavioural clusters\nProduce regular reports on gameplay trends, abuse patterns, and risk indicators to support decision-making across teams\nProvide product and operational improvement recommendations based on gameplay data, player behaviour insights, and bonus performance\nSuggest operational improvements and monitoring processes to strengthen detection capabilities and support automation\nLeads and supports projects related to product and process improvements as delegated by the Head of Casino, while providing cross-functional support to Casino Experts to ensure the successful execution of operational tasks.\n\n\n\n\nRequirements:\n\nMinimum 2 years' experience in the online gaming industry\nStrong analytical and investigative skills with the ability to identify behavioural patterns and anomalies in large datasets\nUnderstanding of online casino gameplay mechanics, betting patterns, and bonus structures\nExperience analysing player behaviour and product performance to generate actionable insights\nAbility to detect fraud indicators and abusive patterns, including bonus abuse, coordinated gameplay, or unusual betting activity\nData analysis capability (Excel/SQL or similar analytical tools) to investigate trends and produce structured reports\nStrong attention to detail and problem-solving skills in reviewing complex gameplay and transaction data\nAbility to translate analytical findings into product or operational recommendations\nEffective communication and stakeholder collaboration skills, working with product teams, risk teams, and external vendors",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:52.950Z"
+    },
+    {
+      "job_id": "4402900885",
+      "title": "Software Engineer",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "11 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract"
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4402900885/",
+      "jd": "About the job\n\nJob Title: Software Developer\n\nJob Type: Part-time\n\nLocation: Remote\n\n\n\n\nJob Summary:\n\nJoin our customer's team as a Software Developer, where innovation, ownership, and technical expertise drive every project. You’ll collaborate with a dynamic and diverse team to design, develop, and deliver robust solutions using modern programming languages and full-stack technologies. If you are passionate about building scalable applications and thrive in a remote and communicative environment, we want to hear from you.\n\n\n\n\nKey Responsibilities:\n\nDesign, implement, and maintain scalable back-end and full-stack applications using Python, Rust, Golang, Java, or Node.js.\nCollaborate closely with cross-functional team members to deliver high-quality software solutions that meet evolving business requirements.\nWrite clean, efficient, and well-documented code, following best software engineering practices.\nTroubleshoot, debug, and optimize existing codebases to improve performance and reliability.\nParticipate in code reviews, technical discussions, and architectural planning to drive continuous improvement.\nContribute to the full software development lifecycle, from concept and design to testing and deployment.\nMaintain clear, concise, and thoughtful written and verbal communication across distributed teams.\n\n\n\n\nRequired Skills and Qualifications:\n\n3+ years of hands-on experience in software development with one or more of the following: Python, Rust, GoLang, Java, Node.js, or full-stack development (backend or full-stack).\nProficiency in building scalable, reliable, and maintainable software systems.\nExperience working in remote, collaborative, and agile environments.\nExpertise in modern development tools, version control systems, and CI/CD pipelines.\nStrong problem-solving skills with keen attention to detail.\nExcellent written and verbal communication skills, with a high standard for clarity and professionalism.\nSelf-driven, proactive, and able to work independently in a distributed setting.\n\n\n\n\nPreferred Qualifications:\n\nExperience with cloud platforms such as AWS, GCP, or Azure.\nKnowledge of DevOps principles and containerization technologies.\nBackground in mentoring or leading small engineering teams.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:55.824Z"
+    },
+    {
+      "job_id": "4402697970",
+      "title": "Software Engineer",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "11 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract"
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4402697970/",
+      "jd": "About the job\n\nJob Title: Software Developer\n\nJob Type: Part-time\n\nLocation: Remote\n\n\n\n\nJob Summary:\n\nJoin our customer's team as a Software Developer, where innovation, ownership, and technical expertise drive every project. You’ll collaborate with a dynamic and diverse team to design, develop, and deliver robust solutions using modern programming languages and full-stack technologies. If you are passionate about building scalable applications and thrive in a remote and communicative environment, we want to hear from you.\n\n\n\n\nKey Responsibilities:\n\nDesign, implement, and maintain scalable back-end and full-stack applications using Python, Rust, Golang, Java, or Node.js.\nCollaborate closely with cross-functional team members to deliver high-quality software solutions that meet evolving business requirements.\nWrite clean, efficient, and well-documented code, following best software engineering practices.\nTroubleshoot, debug, and optimize existing codebases to improve performance and reliability.\nParticipate in code reviews, technical discussions, and architectural planning to drive continuous improvement.\nContribute to the full software development lifecycle, from concept and design to testing and deployment.\nMaintain clear, concise, and thoughtful written and verbal communication across distributed teams.\n\n\n\n\nRequired Skills and Qualifications:\n\n3+ years of hands-on experience in software development with one or more of the following: Python, Rust, GoLang, Java, Node.js, or full-stack development (backend or full-stack).\nProficiency in building scalable, reliable, and maintainable software systems.\nExperience working in remote, collaborative, and agile environments.\nExpertise in modern development tools, version control systems, and CI/CD pipelines.\nStrong problem-solving skills with keen attention to detail.\nExcellent written and verbal communication skills, with a high standard for clarity and professionalism.\nSelf-driven, proactive, and able to work independently in a distributed setting.\n\n\n\n\nPreferred Qualifications:\n\nExperience with cloud platforms such as AWS, GCP, or Azure.\nKnowledge of DevOps principles and containerization technologies.\nBackground in mentoring or leading small engineering teams.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T17:59:58.598Z"
+    },
+    {
+      "job_id": "4402698919",
+      "title": "Full Stack Engineer",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "11 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract"
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4402698919/",
+      "jd": "About the job\n\nJob Title: Full-stack developer\n\nJob Type: Part time( Contractor)\n\nLocation: Remote\n\n\n\n\nJob Summary: \n\nJoin our customer’s team as a Full-stack developer and play a pivotal role in building impactful digital solutions. You will leverage your expertise in modern technologies to design, implement, and maintain scalable applications. This is an excellent opportunity for experienced developers who are passionate about both backend and frontend coding and thrive in a collaborative remote environment.\n\n\n\n\nKey Responsibilities:\n\n- Design, develop, test, and maintain robust web applications using NodeJS, Typescript, Python, JavaScript, and JAVA\n\n- Collaborate closely with cross-functional team members to define and deliver technical solutions\n\n- Optimize applications for maximum speed, scalability, and maintainability\n\n- Participate in code reviews, architecture discussions, and provide mentorship to peers\n\n- Troubleshoot, debug, and resolve technical issues efficiently\n\n- Contribute to both backend and frontend feature development, ensuring high-quality user experiences\n\n- Communicate complex technical concepts clearly in both written and verbal formats\n\n\n\n\nRequired Skills and Qualifications:\n\n- 3+ years of proven experience as a Full-stack developer working with NodeJS, Typescript, Python, JavaScript, and JAVA\n\n- Expertise in building and consuming RESTful APIs\n\n- Strong problem-solving skills and attention to detail\n\n- Excellent written and verbal communication skills\n\n- Ability to work independently and as part of a distributed remote team\n\n- Solid understanding of software development best practices and Agile methodologies\n\n- Experience with version control systems such as Git\n\n\n\n\nPreferred Qualifications:\n\n- Familiarity with cloud platforms (e.g., AWS, Azure, or GCP)\n\n- Experience working with microservices and containerization technologies\n\n- Previous experience collaborating with global teams and stakeholders",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T18:00:01.289Z"
+    },
+    {
+      "job_id": "4402972798",
+      "title": "Electronic Engineer (Qucs-S expert)",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "3 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract",
+        "0 of 1 skills matchMatches your job preferences, job type is {}."
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4402972798/",
+      "jd": "About the job\n\nJob Title: Electronic Engineer (Qucs-S expert)\n\n\n\n\nJob Type: Contract\n\n\n\n\nLocation: Remote\n\n\n\n\nJob Summary:\n\nJoin our customer's dynamic team as an Electronic Engineer specializing in Qucs-S. In this role, you will drive circuit simulation and design innovation, leveraging your deep expertise in Qucs-S to deliver complex electronic solutions. We value strong written and verbal communication skills in our collaborative, remote-first work environment.\n\n\n\n\nKey Responsibilities:\n\nDesign, simulate, and validate electronic circuits and systems using Qucs-S.\nDevelop detailed technical documentation and present findings to both technical and non-technical stakeholders.\nCollaborate with cross-functional teams to translate project requirements into robust electronic solutions.\nOptimize circuit designs for performance, reliability, and manufacturability.\nTroubleshoot, analyze, and resolve issues arising during simulation or prototyping phases.\nStay current with Qucs-S updates, integrating the latest features and best practices into projects.\nMentor team members on Qucs-S best practices and advanced simulation techniques.\n\n\n\n\nRequired Skills and Qualifications:\n\nProven expertise with Qucs-S for electronic circuit simulation and analysis.\nBachelor’s or Master’s degree in Electronic Engineering or a related field.\nDemonstrated experience in electronic circuit design, testing, and optimization.\nExceptional written and verbal communication skills, with attention to clarity and detail.\nStrong problem-solving abilities and a proactive approach to technical challenges.\nAbility to work independently in a remote setting and collaborate effectively with distributed teams.\nExperience creating comprehensive technical documentation.\n\n\n\n\nPreferred Qualifications:\n\nExperience integrating Qucs-S with other EDA tools or custom workflows.\nBackground in analog, digital, or mixed-signal circuit design.\nContributions to open-source Qucs-S projects or community forums.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T18:00:04.130Z"
+    },
+    {
+      "job_id": "4402697785",
+      "title": "Java Game Developer (libGDX)",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "11 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract",
+        "1 of 4 skills matchMatches your job preferences, job type is {}."
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4402697785/",
+      "jd": "About the job\n\nJob Title: Java Game Developer (libGDX)\n\n\n\n\nJob Type: Contract\n\n\n\n\nLocation: Remote\n\n\n\n\nJob Summary\n\nJoin our customer’s dynamic team as a Java Game Developer (libGDX), where you’ll bring engaging 2D and 3D cross-platform games to life. You'll leverage Java and the open-source libGDX framework to design, develop, and deploy high-performance games across desktop, Android, and web platforms, contributing to every stage of the game development lifecycle.\n\n\n\n\nKey Responsibilities\n\nDesign, develop, and maintain immersive 2D and 3D games using Java and libGDX for multiple platforms.\nCollaborate closely with artists, designers, and other developers to define, prototype, and deliver new gameplay experiences.\nOptimize game performance to ensure smooth, high-quality user experiences across desktop, Android, and web environments.\nBuild and maintain reusable, modular code architectures to accelerate future development and promote code sharing.\nImplement innovative gameplay mechanics, user interfaces, and interactive features that engage and delight players.\nDebug, troubleshoot, and resolve technical issues throughout the development process.\nCommunicate clearly and proactively with team members, providing thoughtful feedback and documentation.\n\n\n\n\n\n\n\nRequired Skills and Qualifications\n\nProven experience with Java programming, especially in game development.\nExtensive hands-on expertise with the libGDX framework.\nStrong understanding of cross-platform game development concepts and challenges.\nDemonstrated ability to optimize code for performance and efficiency.\nExperience creating reusable, modular code structures in a collaborative environment.\nExcellent written and verbal communication skills, with an emphasis on clear, organized documentation and teamwork.\nPassion for crafting engaging, interactive gameplay experiences and a keen eye for detail.\n\n\n\n\n\n\n\nPreferred Qualifications\n\nExperience working on both 2D and 3D game projects.\nFamiliarity with deploying games to web, Android, and desktop platforms using libGDX.\nBackground in performance profiling and advanced debugging for game applications.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T18:00:06.768Z"
+    },
+    {
+      "job_id": "4402659654",
+      "title": "区块链底层开发工程师 (Blockchain Engineer)",
+      "company": "Gate",
+      "location": "APAC (Remote)",
+      "posted": "15 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Full-timeMatches your job preferences, job type is Full-time.",
+        "0 of 1 skills matchMatches your job preferences, job type is {}."
+      ],
+      "easy_apply": true,
+      "link": "https://www.linkedin.com/jobs/view/4402659654/",
+      "jd": "About the job\n\n【关于这个岗位】\n\n我们是全球领先的数字资产平台，服务千万级用户，深耕 Web3 基础设施多年。目前，我们正处于底层架构升级的关键节点，旨在打造支撑下一代去中心化金融的高性能公链。\n\n我们不推崇盲目的技术追随，而是在寻找那些渴望在分布式系统底层“深挖一公里”的硬核工程师。如果你对去中心化有坚定信仰，且热衷于在复杂的分布式环境下压榨系统性能，欢迎加入我们，共同定义区块链的物理极限。\n\n\n\n\n【你会做什么】\n\n主导核心架构演进： 负责区块链底层模块的深度重构，在安全性与可扩展性之间实现精妙的技术平衡，直接对系统吞吐量指标负责；\n定义网络性能标准： 深度调优 P2P 网络协议（libp2p/Gossip），驱动全球分布式节点间的通信效率逼近物理带宽上限，消除传播延迟；\n攻克数据存储瓶颈： 针对 LevelDB/RocksDB 进行深度定制优化，解决状态爆炸难题，大幅提升全节点同步与快照裁剪性能；\n驱动前沿技术着陆： 将 ZKP（零知识证明）、Layer2 扩容及 IBC 跨链协议转化为生产级模块，确立生态系统的技术领先地位。\n共识协议实战派： 熟练掌握主流共识机制的工程实现，能够准确识别并修复共识层在极端压力下的逻辑死锁或协议漏洞。\n\n\n\n\n【我们希望你】\n\n底层技术的“破局者”： 熟悉Rust（必选项），具备 5 年以上硬核系统开发经验，有从零推演并实现高性能分布式组件的成功案例；\n分布式系统专家： 深度理解 Linux 内核栈与高性能网络编程，能一眼洞穿复杂的并发锁竞争与性能瓶颈，对“一致性”有近乎苛刻的逻辑严谨性；\n源码级深度玩家： 对 Eth、Cosmos 或主流公链源码有深入研究，拒绝做库的调用者，要做底层协议的定义者与调优者；\n实战平衡大师： 既具备读懂顶级学术论文的理论功底，也深谙真实生产环境下的工程约束，能在技术理想与业务落地间做出最优权衡。\n\n\n\n\n【加分项】\n\n框架与环境： 精通 Substrate 框架或对 SVM/WASM 等高性能执行环境有深入见解；\n专项领域： 具备 ZKP 电路设计、数据可用性（DA）方案或高性能撮合引擎研发背景；\n行业视野： 见过世界顶级分布式系统的架构全貌，对“行业最佳实践”有清晰的定义能力。",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T18:00:09.789Z"
+    },
+    {
+      "job_id": "4402901666",
+      "title": "Linux-Based Post-Production Specialist (Cinelerra)",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "11 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract",
+        "0 of 4 skills matchMatches your job preferences, job type is {}."
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4402901666/",
+      "jd": "About the job\n\nJob Title: Linux-Based Post-Production Specialist (Cinelerra)\n\n\n\n\nJob Type: Specialist, contract.\n\n\n\n\nLocation: Remote\n\n\n\n\nJob Summary\n\nJoin our customer's team as a Linux-Based Post-Production Specialist (Cinelerra), where you will leverage your expertise to elevate professional video workflows in a dynamic and collaborative remote environment. You will optimize high-resolution media projects, tackle complex editing challenges, and contribute to broadcast-quality productions using the robust Cinelerra platform within Linux ecosystems.\n\n\n\n\nKey Responsibilities\n\nLead the editing, compositing, and finishing of high-resolution video using Cinelerra on Linux systems.\nDesign and manage complex multi-track timelines with precision for professional broadcast and digital production.\nImplement advanced compositing techniques, including motion tracking, chroma keying, and effects layering.\nOptimize media handling and rendering pipelines to ensure efficient and seamless workflows.\nTroubleshoot technical issues related to codecs, formats, and hardware compatibility in Linux environments.\nCollaborate with stakeholders to refine creative vision and deliver assets on schedule.\nMaintain detailed documentation of post-production processes and best practices.\n\n\n\n\n\n\n\nRequired Skills and Qualifications\n\nExpert-level proficiency in Cinelerra and Linux-based video post-production workflows.\nDemonstrated ability to handle and optimize high-resolution media files.\nStrong experience with advanced compositing, motion tracking, and color grading.\nKeen attention to detail when managing complex timelines and layered projects.\nExcellent written and verbal communication skills, with emphasis on clear collaboration.\nProblem-solving aptitude and technical troubleshooting in a Linux ecosystem.\nStrong organizational skills and ability to prioritize in a fast-paced, deadline-driven environment.\n\n\n\n\n\n\n\nPreferred Qualifications\n\nHands-on experience with professional broadcast workflows and standards.\nBackground in optimizing hardware and software performance for media production on Linux.\nFamiliarity with additional open-source media tools and rendering pipelines.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T18:00:12.639Z"
+    },
+    {
+      "job_id": "4400374798",
+      "title": "Linux-Based Post-Production Specialist (Cinelerra)",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract",
+        "0 of 4 skills matchMatches your job preferences, job type is {}."
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4400374798/",
+      "jd": "About the job\n\nJob Title: Linux-Based Post-Production Specialist (Cinelerra)\n\n\n\n\nJob Type: Specialist, contract.\n\n\n\n\nLocation: Remote\n\n\n\n\nJob Summary\n\nJoin our customer's team as a Linux-Based Post-Production Specialist (Cinelerra), where you will leverage your expertise to elevate professional video workflows in a dynamic and collaborative remote environment. You will optimize high-resolution media projects, tackle complex editing challenges, and contribute to broadcast-quality productions using the robust Cinelerra platform within Linux ecosystems.\n\n\n\n\nKey Responsibilities\n\nLead the editing, compositing, and finishing of high-resolution video using Cinelerra on Linux systems.\nDesign and manage complex multi-track timelines with precision for professional broadcast and digital production.\nImplement advanced compositing techniques, including motion tracking, chroma keying, and effects layering.\nOptimize media handling and rendering pipelines to ensure efficient and seamless workflows.\nTroubleshoot technical issues related to codecs, formats, and hardware compatibility in Linux environments.\nCollaborate with stakeholders to refine creative vision and deliver assets on schedule.\nMaintain detailed documentation of post-production processes and best practices.\n\n\n\n\n\n\n\nRequired Skills and Qualifications\n\nExpert-level proficiency in Cinelerra and Linux-based video post-production workflows.\nDemonstrated ability to handle and optimize high-resolution media files.\nStrong experience with advanced compositing, motion tracking, and color grading.\nKeen attention to detail when managing complex timelines and layered projects.\nExcellent written and verbal communication skills, with emphasis on clear collaboration.\nProblem-solving aptitude and technical troubleshooting in a Linux ecosystem.\nStrong organizational skills and ability to prioritize in a fast-paced, deadline-driven environment.\n\n\n\n\n\n\n\nPreferred Qualifications\n\nHands-on experience with professional broadcast workflows and standards.\nBackground in optimizing hardware and software performance for media production on Linux.\nFamiliarity with additional open-source media tools and rendering pipelines.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T18:00:15.818Z"
+    },
+    {
+      "job_id": "4402698926",
+      "title": "Java Developer",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "11 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract",
+        "3 of 10 skills matchMatches your job preferences, job type is {}."
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4402698926/",
+      "jd": "About the job\n\nJob Title: Java Developer\n\nLocation: Remote\n\nJob Type: Contract\n\n\n\n\nJob Summary:\n\nJoin our customer’s team as an experienced Backend Developer. In this high-impact, remote role, you’ll design, implement, and optimize robust backend APIs while collaborating with cutting-edge AI research teams. You’ll contribute to testing and improving AI-driven developer tools, helping shape the future of intelligent software development alongside a world-class engineering group.\n\n\n\n\nKey Responsibilities:\n\nDesign, develop, and optimize REST and GraphQL endpoints for scalable APIs.\nDrive data validation, error handling, and security best practices within backend services.\nPlan and execute database migrations, optimizations, and schema design improvements.\nTest and evaluate AI-powered models in Cursor, providing actionable feedback through incident reports, bug traces, and screenshots.\nParticipate in intensive testing bursts, exploring how AI models influence real-world coding workflows.\nCollaborate with the AI research team via Slack, discussing findings and proposing refinements.\nSubmit detailed post-burst surveys, sharing insights on model performance and developer experience.\n\n\n\n\nRequired Skills and Qualifications:\n\n5+ years of professional experience as a Backend Developer, with strong expertise in Java.\nProficient in building and maintaining RESTful and GraphQL APIs.\nAdvanced understanding of backend data validation, error handling, and API security.\nHands-on experience with database migrations, performance tuning, and schema optimization.\nPractical experience with AI-assisted coding tools; familiarity with Cursor is highly desirable.\nExcellent written and verbal communication skills, with a knack for clear incident and bug reporting.\nProven ability to thrive in fast-paced, confidential, and collaborative remote environments.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T18:00:21.011Z"
+    },
+    {
+      "job_id": "4402925913",
+      "title": "Data Scientist",
+      "company": "Joveo Ai",
+      "location": "APAC (Remote)",
+      "posted": "8 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Full-timeMatches your job preferences, job type is Full-time.",
+        "2 of 5 skills matchMatches your job preferences, job type is {}."
+      ],
+      "easy_apply": true,
+      "link": "https://www.linkedin.com/jobs/view/4402925913/",
+      "jd": "About the job\n\nAbout Us: At Joveo, we are on a mission to deliver a job for everyone. As the global leader in programmatic job advertising, our Data Science team operates like a hybrid of a librarian and a Swiss army knife—leveraging gargantuan data sets and cutting-edge AI to match the right talent to the right roles.\n\n\n\n\nThe Role (TL;DR): We are looking for a Data Scientist to join our cross-functional pods. You will build and deploy state-of-the-art NLP models (like SentenceBERT) and predictive algorithms to optimize job embeddings, occupation classification, and applicant forecasting.\n\n\n\n\nWhat You’ll Do:\n\nDevelop and fine-tune language-agnostic embedding models to process millions of job postings.\nWork with transfer learning models and predictive techniques (XGBoost, gradient boosting) to lower Cost-Per-Applicant (CPA) for our clients.\nPartner directly with Product Managers and Software Engineers in decentralized, semi-autonomous pods to push code into production.\nIdentify opportunities to use AI/ML to eliminate bias in recruitment advertising.\n\n\n\n\nWhat You Bring:\n\nProven experience in building machine learning models, specifically in NLP and predictive analytics.\nProficiency in Python and relevant libraries (NumPy, Pandas, SciPy, Gensim).\nExperience with big data frameworks and deploying models into cloud environments.\nA \"can-do\" mindset and a passion for solving complex, real-world problems.\n\n\n\n\nWhy Joveo?\n\nImpact: Your code will directly help millions of people find jobs.\nFlexibility: Remote-first culture with flexible working hours.\nGrowth: Generous learning and development budgets.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T18:00:30.286Z"
+    },
+    {
+      "job_id": "4402696952",
+      "title": "C++ Developer",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "11 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Contract"
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4402696952/",
+      "jd": "About the job\n\nJob Title: C++ Developer\n\nJob Type: Part time (Contract)\n\nLocation: Remote\n\n\n\n\nJob Summary\n\nJoin our esteemed customer's team as a C++ Developer, where your expertise will be pivotal in advancing cutting-edge software solutions. As a key contributor, you will design, develop, and optimize robust applications, delivering high-quality code in a dynamic and supportive remote environment.\n\n\n\n\nKey Responsibilities\n\nDesign, implement, and maintain high-performance C++ applications tailored to complex business requirements.\nCollaborate effectively with cross-functional teams to develop scalable and efficient solutions.\nParticipate in code reviews, ensuring adherence to best practices and high standards.\nTroubleshoot and optimize legacy and contemporary codebases for performance and reliability.\nDocument technical specifications and maintain clear, concise communication around project progress.\nContinuously explore and integrate emerging C++ standards and libraries into development processes.\nContribute to a culture of innovation by proactively identifying areas for process and system improvements.\n\n\n\n\nRequired Skills and Qualifications\n\n3+ years of professional experience in C++ development, with a deep understanding of its core concepts.\nProven track record in architecting and delivering complex, high-quality software solutions.\nExceptional written and verbal communication skills, with an emphasis on clarity and collaboration.\nStrong problem-solving skills and an analytical mindset.\nExperience working in remote, distributed teams and adapting to diverse work cultures.\nSolid grasp of modern development tools, version control systems, and agile methodologies.\nAbility to independently manage tasks while proactively engaging with team members.\n\n\n\n\nPreferred Qualifications\n\nExperience in performance-critical application development or real-time systems.\nFamiliarity with other programming languages and multi-paradigm development.\nPrior work with large-scale, customer-facing software projects.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T18:00:33.271Z"
+    },
+    {
+      "job_id": "4402912078",
+      "title": "C# Developer",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "11 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Part-time"
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4402912078/",
+      "jd": "About the job\n\nJob Title: C# Developer\n\nJob Type: Part time , Contract\n\nLocation: Remote\n\n\n\n\nJob Summary\n\nJoin our customer's team as a seasoned C# Developer, where you will play a pivotal role in developing high-quality software solutions. You'll collaborate in a dynamic, remote environment that values clear communication and innovation. This opportunity is ideal for a developer who is passionate about technology, eager to solve challenges, and committed to continuous improvement.\n\n\n\n\nKey Responsibilities\n\nDesign, develop, and maintain robust C# applications, ensuring optimal functionality and performance.\nCollaborate closely with distributed team members to deliver scalable software solutions.\nTranslate business requirements into technical specifications and actionable development tasks.\nWrite clean, efficient, and well-documented code following industry best practices.\nParticipate in code reviews, offering insightful feedback to peers and embracing constructive critique.\nTroubleshoot, debug, and upgrade existing systems as needed.\nContribute to technical discussions and share your expertise to drive project success.\n\n\n\n\nRequired Skills and Qualifications\n\n3+ years of proven experience as a C# Developer, preferably in agile environments.\nAdvanced proficiency in C# and the .NET ecosystem.\nStrong understanding of object-oriented programming and design patterns.\nExcellent written and verbal communication skills, with a keen attention to detail.\nDemonstrated ability to work independently in a remote setup and collaborate across time zones.\nExperience with version control systems such as Git.\nSolid problem-solving skills and an analytical mindset.\n\n\n\n\nPreferred Qualifications\n\nExperience with cloud-based architectures (e.g., Azure or AWS).\nFamiliarity with DevOps practices and CI/CD pipelines.\nBackground in mentoring or guiding junior developers.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T18:00:35.985Z"
+    },
+    {
+      "job_id": "4402693931",
+      "title": "PHP Developer",
+      "company": "micro1",
+      "location": "APAC (Remote)",
+      "posted": "11 hours ago",
+      "work_type": [
+        "RemoteMatches your job preferences, workplace type is Remote.",
+        "Part-time"
+      ],
+      "easy_apply": false,
+      "link": "https://www.linkedin.com/jobs/view/4402693931/",
+      "jd": "About the job\n\nJob Title: PHP Developer\n\nJob Type: Part time\n\nLocation: Remote\n\n\n\n\nJob Summary:\n\nOur customer’s team is seeking a seasoned PHP Developer to help drive complex web projects and deliver robust, scalable solutions. If you excel in collaborative, remote environments and have a deep passion for both backend and web development, you’ll thrive in this role. Strong written and verbal communication skills are essential to contribute effectively to a global team.\n\n\n\n\nKey Responsibilities:\n\nDevelop, test, and maintain dynamic PHP-based web applications, ensuring high performance and responsiveness.\nCollaborate with cross-functional stakeholders to define project requirements and architectural solutions.\nWrite clean, maintainable, and efficient code following best software engineering practices.\nParticipate in code reviews, troubleshooting, and optimizing application performance.\nIntegrate third-party APIs and web services to enhance application functionality and user experience.\nContribute to technical documentation and knowledge sharing with the wider customer’s team.\nAdapt to evolving project needs, continuously improving solutions and processes.\n\n\n\n\nRequired Skills and Qualifications:\n\nMinimum 5 years of hands-on PHP development experience in a professional setting.\nStrong expertise in web development, including HTML, CSS, JavaScript, and relational databases.\nDemonstrated experience building and maintaining scalable web applications.\nExcellent written and verbal communication skills for effective remote collaboration.\nSolid understanding of OOP principles, MVC frameworks, and RESTful API development.\nProficiency with source control tools such as Git.\nStrong problem-solving skills and attention to detail.\n\n\n\n\nPreferred Qualifications:\n\nExperience working on high-traffic, customer-facing platforms.\nFamiliarity with cloud services, containerization, or DevOps practices.\nInvolvement in Agile or Scrum teams within a remote environment.",
+      "source": "linkedin",
+      "scraped_at": "2026-04-16T18:00:38.566Z"
+    }
+  ]
+}

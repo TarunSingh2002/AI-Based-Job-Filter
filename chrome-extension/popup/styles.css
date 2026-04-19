@@ -1,0 +1,291 @@
+/* ── Base ── */
+body {
+  width: 360px;
+  padding: 12px;
+  font-family: Arial, sans-serif;
+  background-color: #f3f6f8;
+  margin: 0;
+  font-size: 14px;
+}
+
+.container {
+  background-color: white;
+  padding: 14px 16px 0;        /* bottom padding now belongs to scraper bar */
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Tab Bar ── */
+.tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #e0e0e0;
+  flex-shrink: 0;
+}
+
+.tab-btn {
+  flex: 1 1 calc(33% - 5px);
+  min-width: 72px;
+  background: #f0f4f8;
+  color: #555;
+  border: 1px solid #ccc;
+  padding: 6px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  transition: background-color 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+
+.tab-btn.active {
+  background-color: #0a66c2;
+  color: white;
+  border-color: #0a66c2;
+}
+
+.tab-btn:hover:not(.active) { background-color: #dce6f0; }
+
+/* ── Tab Content — scrollable ── */
+.tab-content {
+  display: block;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+  flex-shrink: 0;
+}
+
+.tab-content::-webkit-scrollbar { width: 4px; }
+.tab-content::-webkit-scrollbar-track { background: transparent; }
+.tab-content::-webkit-scrollbar-thumb { background: #c0cdd8; border-radius: 4px; }
+.tab-content.hidden { display: none; }
+
+/* ── Form Elements ── */
+h3 {
+  color: #0a66c2;
+  margin: 12px 0 6px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+textarea {
+  width: 100%;
+  height: 62px;
+  padding: 7px;
+  margin-bottom: 4px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  resize: vertical;
+  font-size: 12px;
+  box-sizing: border-box;
+  color: #333;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: #0a66c2;
+  box-shadow: 0 0 0 2px rgba(10,102,194,0.15);
+}
+
+button {
+  background-color: #0a66c2;
+  color: white;
+  border: none;
+  padding: 9px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  width: 100%;
+  margin-top: 12px;
+  transition: background-color 0.2s;
+}
+
+button:hover:not(:disabled) { background-color: #004fa3; }
+button:disabled { background-color: #7aabdc; cursor: not-allowed; }
+
+.btn-danger {
+  background-color: #c62828;
+  margin-top: 6px;
+}
+.btn-danger:hover:not(:disabled) { background-color: #8e0000; }
+
+/* ── Toggle Switch ── */
+.toggle-container {
+  display: flex;
+  align-items: center;
+  margin: 8px 0;
+  gap: 10px;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.switch input { opacity: 0; width: 0; height: 0; }
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #ccc;
+  transition: .35s;
+  border-radius: 34px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px; width: 18px;
+  left: 2px; bottom: 2px;
+  background-color: white;
+  transition: .35s;
+  border-radius: 50%;
+}
+
+input:checked + .slider { background-color: #0a66c2; }
+input:checked + .slider:before { transform: translateX(16px); }
+
+/* ── Radio Group ── */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  background: #f7f9fb;
+  border: 1px solid #e0e8f0;
+  border-radius: 6px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+}
+
+.radio-option input[type="radio"] {
+  accent-color: #0a66c2;
+  width: 15px; height: 15px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.radio-hint { color: #888; font-size: 11px; }
+
+/* ── Seen Promoted List ── */
+.seen-list {
+  font-size: 11px;
+  color: #555;
+  max-height: 90px;
+  overflow-y: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  line-height: 1.7;
+  background: #fafafa;
+}
+
+.seen-item strong { color: #333; }
+
+/* ── Save Tick Animation ── */
+.save-status {
+  position: fixed;
+  top: 10px; right: 10px;
+  color: #00c853;
+  font-size: 22px;
+  font-weight: bold;
+  animation: fadeInOut 1.5s ease-in-out;
+}
+
+@keyframes fadeInOut {
+  0%   { opacity: 0; transform: translateY(-8px); }
+  20%  { opacity: 1; transform: translateY(0); }
+  80%  { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-8px); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SCRAPER BAR — pinned at bottom, never scrolls away
+   Always visible when on the LinkedIn tab
+   ═══════════════════════════════════════════════════════════ */
+
+#scraper-bar {
+  border-top: 2px solid #d4edda;
+  background: #f0faf4;
+  border-radius: 0 0 10px 10px;
+  padding: 10px 14px 14px;
+  margin-top: 10px;
+  flex-shrink: 0;
+}
+
+.scraper-bar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.scraper-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #057642;
+}
+
+.scraper-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: #057642;
+  background: #d4edda;
+  border-radius: 10px;
+  padding: 1px 8px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.scraper-status {
+  font-size: 11.5px;
+  color: #555;
+  line-height: 1.4;
+  margin-bottom: 8px;
+  min-height: 16px;
+}
+
+.scraper-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-scrape {
+  background-color: #057642;
+  margin-top: 0;
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.btn-scrape:hover:not(:disabled) { background-color: #045e34; }
+
+.btn-stop {
+  background-color: #c62828;
+  margin-top: 0;
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.btn-stop:hover:not(:disabled) { background-color: #8e0000; }

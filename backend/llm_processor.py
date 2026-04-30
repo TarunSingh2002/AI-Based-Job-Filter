@@ -132,7 +132,7 @@ def _make_gemini_llm(api_key: str):
     from langchain_google_genai import ChatGoogleGenerativeAI
     return ChatGoogleGenerativeAI(
         google_api_key=api_key,
-        model="gemini-1.5-flash",
+        model="gemini-2.5-flash",
         temperature=0,
     )
 

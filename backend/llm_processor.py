@@ -83,7 +83,7 @@ Here is exactly what each field means:
    - 10 = almost all required skills match perfectly.
    - 7-9 = good match, candidate has most key skills.
    - 4-6 = partial match, candidate has some but missing important ones.
-   - 1-3 = poor match, job requires very different skills.
+   - 1-3 = poor match, job requires very different skills and teaching like role and also the intern role, any kind of teaching role will get 1 rating ok.
    - Be conservative. If the job wants 5 years of Java and candidate has none, score low.
 
 2. work_type (string):

@@ -125,7 +125,7 @@ Extract the 5 fields described above. Be precise and conservative."""),
 
 def _make_groq_llm(api_key: str):
     from langchain_groq import ChatGroq
-    return ChatGroq(api_key=api_key, model="llama-3.3-70b-versatile", temperature=0)
+    return ChatGroq(api_key=api_key, model="openai/gpt-oss-120b", temperature=0)
 
 
 def _make_gemini_llm(api_key: str):

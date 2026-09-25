@@ -7,9 +7,9 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
 
-    // Show scraper bar on LinkedIn and Glassdoor tabs only
+    // Show scraper bar on Glassdoor tab only (LinkedIn scraper removed — it got the account restricted)
     const bar = document.getElementById('scraper-bar');
-    if (bar) bar.style.display = (btn.dataset.tab === 'linkedin' || btn.dataset.tab === 'glassdoor') ? 'block' : 'none';
+    if (bar) bar.style.display = btn.dataset.tab === 'glassdoor' ? 'block' : 'none';
   });
 });
 
@@ -235,11 +235,10 @@ startBtn.addEventListener('click', () => {
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     const tab = tabs[0];
 
-    const isLinkedIn  = tab?.url?.includes('linkedin.com/jobs');
     const isGlassdoor = tab?.url?.includes('glassdoor.co');
 
-    if (!isLinkedIn && !isGlassdoor) {
-      statusEl.textContent = '⚠️ Go to a LinkedIn Jobs or Glassdoor Jobs search page first.';
+    if (!isGlassdoor) {
+      statusEl.textContent = '⚠️ Go to a Glassdoor Jobs search page first.';
       statusEl.style.color = '#c62828';
       return;
     }

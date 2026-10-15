@@ -1,0 +1,32 @@
+# Your candidate profile. decide.py takes every threshold from here - restart the backend after editing.
+
+# ── Experience ────────────────────────────────────────────────────────────────────────────────────
+experience_years: 1            # SET THIS: your years of work experience
+experience_tolerance: 2        # accept jobs asking for up to experience_years + this many years
+                               # (and treat jobs capped below experience_years - this as "overqualified")
+
+# ── Role types to hide ────────────────────────────────────────────────────────────────────────────
+# Possible values: ai_ml_engineering, software_engineering, data_analytics, teaching_training,
+#                  ai_data_annotation, internship, research_academic, non_technical, unclear
+avoid_role_families: [teaching_training, ai_data_annotation, internship, research_academic, non_technical]
+
+# Title stage: seniority levels you accept (entry, mid, senior, lead_plus). The rest are rejected
+# when the AI is confident.
+allowed_seniority: [entry, mid]
+
+# ── Thresholds ────────────────────────────────────────────────────────────────────────────────────
+min_match_score: 3             # JD stage: reject when the skills match score (1-10) is below this.
+                               # The AI picks a skills level, decide.py turns it into the score:
+                               #   0 "almost none of the core skills"           -> 1
+                               #   1 "one or two minor skills, core ones missing" -> 3
+                               #   2 "some overlap" -> 5,  3 "about half" -> 6,  4 "most" -> 8,  5 "nearly all" -> 10
+                               # 3 rejects only level 0 (score 1-2), on purpose: missing skills can be learned.
+                               # So ANY role type not in avoid_role_families above - software_engineering,
+                               # data_analytics and unclear too - passes with a small overlap (e.g. Git, Docker).
+                               # Use 4 to also reject level 1 (core skills missing).
+reject_confidence: 0.6         # only reject on an AI answer whose confidence is >= this (0-1);
+                               # below it the job stays visible ("when in doubt, show it")
+
+# ── Your skills ───────────────────────────────────────────────────────────────────────────────────
+# The JD stage asks how well these cover the core skills each job requires.
+skills: [Machine Learning, Deep Learning, Artificial Intelligence, Natural Language Processing, Large Language Models, Generative AI, Retrieval Augmented Generation, LLM Fine-Tuning, LoRA, QLoRA, PEFT, Hugging Face, Transformers, Data Analysis, Data Scientist, Python, TensorFlow, PyTorch, Scikit-Learn, NumPy, Pandas, LangChain, FastAPI, MongoDB, REST APIs, AWS, Docker, DVC, MLflow, ONNX, MLOps, Git]

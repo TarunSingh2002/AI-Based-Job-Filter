@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Job Filter v2</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">Job Filter <small>v2</small></span>
+  </header>
+
+  <nav class="tabs">
+    <button type="button" data-tab="filters">Filters</button>
+    <button type="button" data-tab="linkedin">LinkedIn</button>
+    <button type="button" data-tab="glassdoor">Glassdoor</button>
+    <button type="button" data-tab="naukri">Naukri</button>
+    <button type="button" data-tab="indeed">Indeed</button>
+    <button type="button" data-tab="ai">AI</button>
+  </nav>
+
+  <!-- Every form control names the setting it edits with data-setting="section.key" (see popup.js). -->
+  <main>
+    <section class="panel" id="tab-filters">
+      <p class="hint">Rules run first on every site, instantly and for free. Comma separated; case and
+        punctuation are ignored and keywords match whole words.</p>
+      <label class="field">
+        <span>Hide titles containing</span>
+        <textarea rows="4" data-setting="global.blacklistKeywords" data-kind="list"
+                  placeholder="teacher, intern, data entry"></textarea>
+      </label>
+      <label class="field">
+        <span>Only show titles containing <em>(empty = no limit)</em></span>
+        <textarea rows="2" data-setting="global.whitelistKeywords" data-kind="list"
+                  placeholder="machine learning, ai, python"></textarea>
+      </label>
+      <label class="field">
+        <span>Hide companies <em>(exact name)</em></span>
+        <textarea rows="2" data-setting="global.blacklistCompanies" data-kind="list"
+                  placeholder="soul ai, xyz ltd"></textarea>
+      </label>
+    </section>
+
+    <section class="panel" id="tab-linkedin" hidden>
+      <p class="hint">Read-only on LinkedIn: no clicks, no scrolling, no scraping. Cards are hidden by a browser
+        stylesheet; verdicts show in the side panel and the toolbar badge.</p>
+      <button type="button" id="openSidePanel" class="primary wide">Open side panel</button>
+
+      <fieldset>
+        <legend>Promoted jobs</legend>
+        <label class="radio"><input type="radio" name="li-promoted" value="show" data-setting="linkedin.promotedMode"> Show</label>
+        <label class="radio"><input type="radio" name="li-promoted" value="hide" data-setting="linkedin.promotedMode"> Hide all</label>
+        <label class="radio"><input type="radio" name="li-promoted" value="partial" data-setting="linkedin.promotedMode"> Partial: hide jobs I already opened</label>
+        <div id="partialScopeBox" class="sub">
+          <label class="radio"><input type="radio" name="li-scope" value="all" data-setting="linkedin.partialScope"> Remember every job I open</label>
+          <label class="radio"><input type="radio" name="li-scope" value="promoted" data-setting="linkedin.partialScope"> Remember only promoted jobs</label>
+        </div>
+        <div class="row between">
+          <span id="partialCount" class="muted"></span>
+          <button type="button" id="clearPartial" class="small danger">Clear list</button>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Hide</legend>
+        <label class="check"><input type="checkbox" data-setting="linkedin.hideApplied"> Jobs I applied to</label>
+        <label class="check"><input type="checkbox" data-setting="linkedin.hideDismissed"> Jobs I dismissed</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>AI</legend>
+        <label class="check"><input type="checkbox" data-setting="linkedin.titleAI"> Screen the titles in the list</label>
+        <label class="check"><input type="checkbox" data-setting="linkedin.jdAI"> Score the job I open (full description)</label>
+      </fieldset>
+    </section>
+
+    <section class="panel" id="tab-glassdoor" hidden>
+      <div class="scrape" data-site="glassdoor"></div>
+      <fieldset>
+        <legend>Options</legend>
+        <label class="check"><input type="checkbox" data-setting="glassdoor.hideSaved"> Hide jobs already saved</label>
+        <label class="inline">Save processed jobs
+          <select data-setting="glassdoor.markProcessed">
+            <option value="all">all</option>
+            <option value="rejected">rejected only</option>
+            <option value="none">none</option>
+          </select>
+        </label>
+        <label class="inline">Max pages <input type="number" min="1" max="100" data-setting="glassdoor.maxPages"></label>
+      </fieldset>
+      <p class="hint">"Save processed" clicks the site's own Save button, so "hide saved" skips those jobs next time.</p>
+    </section>
+
+    <section class="panel" id="tab-naukri" hidden>
+      <div class="scrape" data-site="naukri"></div>
+      <fieldset>
+        <legend>Options</legend>
+        <label class="check"><input type="checkbox" data-setting="naukri.hideSaved"> Hide jobs already saved</label>
+        <label class="check"><input type="checkbox" data-setting="naukri.hidePromoted"> Hide promoted / ad cards</label>
+        <label class="inline">Save processed jobs
+          <select data-setting="naukri.markProcessed">
+            <option value="all">all</option>
+            <option value="rejected">rejected only</option>
+            <option value="none">none</option>
+          </select>
+        </label>
+        <label class="inline">Max pages <input type="number" min="1" max="100" data-setting="naukri.maxPages"></label>
+        <label class="inline">Job pages open at once <input type="number" min="1" max="4" data-setting="naukri.jdTabs"></label>
+      </fieldset>
+      <p class="hint">Naukri descriptions are read from the real job pages in a minimized window, which closes when
+        scraping stops.</p>
+    </section>
+
+    <section class="panel" id="tab-indeed" hidden>
+      <div class="scrape" data-site="indeed"></div>
+      <fieldset>
+        <legend>Options</legend>
+        <label class="check"><input type="checkbox" data-setting="indeed.hideSaved"> Hide jobs already saved</label>
+        <label class="inline">Save processed jobs
+          <select data-setting="indeed.markProcessed">
+            <option value="all">all</option>
+            <option value="rejected">rejected only</option>
+            <option value="none">none</option>
+          </select>
+        </label>
+        <label class="inline">Max pages <input type="number" min="1" max="100" data-setting="indeed.maxPages"></label>
+      </fieldset>
+    </section>
+
+    <section class="panel" id="tab-ai" hidden>
+      <label class="check"><input type="checkbox" data-setting="aiEnabled"> Use AI screening <em>(off = rules only)</em></label>
+      <label class="field">
+        <span>Backend URL</span>
+        <input type="text" data-setting="backendUrl" spellcheck="false">
+      </label>
+      <div class="row between health-row">
+        <span id="health" class="health">Not checked yet</span>
+        <button type="button" id="checkHealth" class="small">Check</button>
+      </div>
+      <p class="hint">Start it from <code>backend/</code> with <code>uvicorn app:app --port 8765</code></p>
+      <p class="hint" id="csvHint"></p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span id="saveStatus" class="muted"></span>
+    <button type="button" id="save" class="primary">Save</button>
+  </footer>
+
+  <!-- Filled into every .scrape box by popup.js. Count names match scrape_state.counts. -->
+  <template id="scrapeTemplate">
+    <div class="status" data-role="status">Idle</div>
+    <div class="counts">
+      <div><b data-count="seen">0</b><span>seen</span></div>
+      <div><b data-count="ruleHidden">0</b><span>rules hid</span></div>
+      <div><b data-count="titleRejected">0</b><span>title rejected</span></div>
+      <div><b data-count="jdRejected">0</b><span>JD rejected</span></div>
+      <div class="good"><b data-count="matched">0</b><span>matched</span></div>
+      <div><b data-count="errors">0</b><span>errors</span></div>
+    </div>
+    <div class="row">
+      <button type="button" class="primary" data-action="start">Start</button>
+      <button type="button" data-action="stop">Stop</button>
+      <button type="button" data-action="resume">Resume</button>
+    </div>
+    <p class="hint" data-role="hint"></p>
+  </template>
+
+  <script src="../common/filters.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

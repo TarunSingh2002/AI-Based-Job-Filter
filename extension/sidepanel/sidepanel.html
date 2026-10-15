@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Job Filter v2</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">Job Filter <small>LinkedIn</small></span>
+  </header>
+
+  <p id="aiNotice" class="notice" hidden></p>
+
+  <!-- Asked once per browser session when the partial-hide list is not empty. -->
+  <section id="partialPrompt" class="card prompt" hidden>
+    <p><b id="promptCount">0</b> jobs you opened earlier are still hidden (partial hide). Keep hiding them?</p>
+    <div class="row">
+      <button type="button" id="promptKeep" class="primary">Keep</button>
+      <button type="button" id="promptClear" class="danger">Clear</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <p id="emptyState" class="muted">Open a job on LinkedIn to see its verdict here.</p>
+    <div id="jobBox" hidden>
+      <h1 id="jobTitle"></h1>
+      <div id="jobCompany" class="muted"></div>
+      <div id="statusLine" class="status"></div>
+      <div id="verdictBox" class="verdict" hidden>
+        <div>
+          <div id="verdictWord" class="verdict-word"></div>
+          <div id="verdictMeta" class="verdict-meta"></div>
+        </div>
+        <div id="verdictScore" class="verdict-score"></div>
+      </div>
+      <p id="verdictReason" class="reason"></p>
+      <p id="verdictDetails" class="muted small"></p>
+    </div>
+  </section>
+
+  <section class="card row between">
+    <span id="partialCount"></span>
+    <button type="button" id="clearPartial" class="small danger">Clear</button>
+  </section>
+
+  <section class="card">
+    <div class="row between">
+      <h2>Today <span id="statsDate" class="muted"></span></h2>
+      <button type="button" id="refreshStats" class="small">Refresh</button>
+    </div>
+    <table id="statsTable">
+      <thead><tr><th>Site</th><th>Matches</th><th>Rejected</th></tr></thead>
+      <tbody id="statsBody"></tbody>
+    </table>
+    <p id="statsError" class="muted small" hidden></p>
+  </section>
+
+  <footer class="note">
+    Nothing here is drawn inside LinkedIn's page. The only change there is a browser stylesheet that hides cards.
+  </footer>
+
+  <script src="../common/filters.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>

@@ -3,7 +3,6 @@ THE PROMPT. Every question the AI is asked lives in this file.
 
 The dicts below are already in the Jev wire format, so the Jev provider sends them unchanged:
     {question_id: {"type": "choice" | "score" | "noul", "instructions": str | object, "criteria": ...}}
-(The offline test stand-in, tests/mock_provider.py, reads only the ids.)
 
 Jev best practices followed here:
 1. Literal instructions. Each question says exactly what to judge and which state field to read

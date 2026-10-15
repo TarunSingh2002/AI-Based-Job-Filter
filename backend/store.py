@@ -52,7 +52,7 @@ class Store:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self.output_dir = output_dir
         # isolation_level=None = autocommit: every statement is saved immediately.
-        # check_same_thread=False: the test client runs the app in a helper thread.
+        # check_same_thread=False: the server may reach the DB from more than one thread.
         self.db = sqlite3.connect(db_path, isolation_level=None, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.db.execute(SCHEMA)

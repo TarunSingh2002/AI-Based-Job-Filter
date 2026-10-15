@@ -54,9 +54,7 @@ backend/
   config.py           JEV_URL / JEV_MODEL constants + pydantic-settings (backend/.env holds only JEV_API_KEY)
   profile.yaml        candidate profile (skills, experience, avoided role types, thresholds)
   .env.example
-  requirements.txt    minimal: fastapi, uvicorn, langgraph, httpx, pydantic, pydantic-settings, pyyaml, openpyxl,
-                      pytest, pytest-asyncio
-  tests/              pytest, offline: tests/mock_provider.py (keyword rules) stands in for Jev
+  requirements.txt    minimal: fastapi, uvicorn, langgraph, httpx, pydantic, pydantic-settings, pyyaml, openpyxl
 ```
 
 ### 2.1 Config
@@ -65,7 +63,7 @@ Which Jev is used is two constants at the top of `config.py`:
 `JEV_URL = "https://opencode.ai/inference/v1/systemone"`, `JEV_MODEL = "jev-1.13-free"`
 (OpenCode paid: `jev-1.13`; TypeSafe direct: `https://api.typesafe.ai/v1/systemone` + `jev-latest`).
 OUTPUT_DIR (`output`), DB_PATH (`data/jobs.db`), PROFILE_PATH (`profile.yaml`) have fixed defaults, resolved against
-`backend/` (so results land in `backend/output/`); tests override them via env.
+`backend/` (so results land in `backend/output/`).
 
 ### 2.2 HTTP API (JSON). CORS: allow all origins (extension background calls it).
 
@@ -208,7 +206,7 @@ Noul answer: `{"type":"noul","noul":float}` (confidence = abs(noul-0.5)*2).
 Errors: 401 → raise clear "bad TYPESAFE_API_KEY"; 422 → raise with body; 429/529 → retry with exponential backoff (0.5,1,2,4s; max 4 tries).
 Concurrency: asyncio.Semaphore(16). Timeout 20 s.
 
-Jev is the only provider. Tests use `tests/mock_provider.py` (deterministic keyword rules, same Answer shapes) so they run offline.
+Jev is the only provider. (The offline test suite was removed after v2 shipped; it is in git history, commit 941c6d6.)
 
 ### 2.7 Storage (`store.py`)
 SQLite table `jobs(site, job_id, stage, decision, reason, confidence, match_score, role_family, min_years, max_years, work_mode,

@@ -27,15 +27,12 @@ class JevProvider:
     # Seconds to wait before each retry -> at most 4 tries in total.
     retry_waits: tuple[float, ...] = (0.5, 1.0, 2.0)
 
-    def __init__(self, api_key: str, model: str, url: str, transport: httpx.AsyncBaseTransport | None = None):
+    def __init__(self, api_key: str, model: str, url: str):
         if not api_key.strip():
             raise ValueError("JEV_API_KEY is empty - put your OpenCode (or TypeSafe) key in backend/.env")
         self.model = model
         self.url = url
-        # `transport` is only for tests (httpx.MockTransport), so no real request is ever made there.
-        self._client = httpx.AsyncClient(
-            timeout=20, headers={"Authorization": f"Bearer {api_key.strip()}"}, transport=transport
-        )
+        self._client = httpx.AsyncClient(timeout=20, headers={"Authorization": f"Bearer {api_key.strip()}"})
         self._limit = asyncio.Semaphore(16)  # max requests in flight at once
 
     async def ask(self, state: dict, questions: dict) -> dict[str, Answer]:

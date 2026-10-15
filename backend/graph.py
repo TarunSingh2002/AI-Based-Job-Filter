@@ -42,7 +42,7 @@ class JobState(TypedDict):
 
 
 def build_graph(provider: Provider, profile: Profile, store: Store):
-    """Wire the steps together. Provider, profile and store are passed in (not global) so tests can swap them."""
+    """Wire the steps together. Provider, profile and store are passed in, built once at startup by app.py."""
 
     # ── 1. Which stage? ─────────────────────────────────────────────────────────────────────────
 

@@ -5,8 +5,7 @@
 //   2. Scraper adapter for JFScraper (sites/scraper-core.js), started from the popup.
 // Job pages (/job-listings-*) are handled by sites/naukri-job.js instead.
 //
-// Selectors verified live 2026-10-14 (DESIGN.md 3.5). The same selectors are used by
-// extension/tests/naukri-console-test.js — keep both files in sync.
+// Selectors verified live 2026-10-14 (DESIGN.md 3.5).
 
 const NAUKRI_SEL = {
   card: '.srp-jobtuple-wrapper[data-job-id]',

@@ -32,7 +32,7 @@ log = logging.getLogger("job_filter")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Build everything once at startup (not at import time, so tests can point it at temp folders)."""
+    """Build everything once at startup (not at import time)."""
     settings = get_settings()
     app.state.profile = load_profile(settings.profile_path())
     app.state.provider = get_provider(settings)

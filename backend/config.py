@@ -3,7 +3,7 @@ Configuration. backend/.env holds only JEV_API_KEY; the candidate profile lives 
 
 Relative paths (OUTPUT_DIR, DB_PATH, PROFILE_PATH) are resolved against the backend/ folder,
 so the server behaves the same no matter which folder you start it from. They have fixed defaults
-and are not meant to be set in .env (the tests override them to use temp folders).
+and are not meant to be set in .env.
 """
 
 from functools import lru_cache
@@ -27,7 +27,7 @@ JEV_MODEL = "jev-1.13-free"
 
 
 class Settings(BaseSettings):
-    # Real environment variables win over values in .env (handy for tests).
+    # Real environment variables win over values in .env.
     model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", extra="ignore")
 
     JEV_API_KEY: str = ""  # the only thing that belongs in backend/.env

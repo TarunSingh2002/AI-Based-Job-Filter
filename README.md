@@ -79,17 +79,6 @@ description any other way without its own page). Leave that window alone; it clo
    disappears once you open another job; copies of it disappear everywhere. The side panel asks once per browser
    session whether to **Keep** or **Clear** that list.
 
-## 4. Tests
-
-```bash
-cd backend && .venv/Scripts/python -m pytest -q
-```
-
-Selector checks without the extension (read-only, paste into F12 → Console on the site):
-- Naukri search page: [extension/tests/naukri-console-test.js](extension/tests/naukri-console-test.js) prints a table of every card.
-- LinkedIn jobs page (click a job first): [extension/tests/linkedin-console-test.js](extension/tests/linkedin-console-test.js)
-  copies a structure report to the clipboard. Use it when LinkedIn changes its page and jobs stop being hidden.
-
 ## Files
 
 ```

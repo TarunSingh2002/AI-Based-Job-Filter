@@ -7,11 +7,7 @@ PyYAML==6.0.3
 
 # AI flow + Jev
 langgraph==1.2.15
-httpx==0.28.1          # Jev REST calls (and FastAPI's test client)
+httpx==0.28.1          # Jev REST calls
 
 # Results
 openpyxl==3.1.5        # output/<date>/jobs.xlsx: the CSVs as sortable Excel tables
-
-# Tests
-pytest==9.1.1
-pytest-asyncio==1.4.0

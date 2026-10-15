@@ -1,4 +1,4 @@
-"""The AI provider: always Jev. (Tests swap in tests/mock_provider.py so they run offline.)"""
+"""The AI provider: always Jev."""
 
 from config import JEV_MODEL, JEV_URL
 from providers.base import Provider

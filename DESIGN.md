@@ -330,13 +330,23 @@ It only READS the DOM and sends messages to background.
   Title `.job-card-list__title--link` (fallback `a[href*="/jobs/view/"]`), company `.artdeco-entity-lockup__subtitle span`.
   Promoted: any `.job-card-container__footer-item` text includes "Promoted". Applied: `.job-card-container__footer-job-state` includes "Applied".
   Dismissed: card text includes "show you this job again".
-- Current job: `currentJobId` query param of `location.href` (poll every 700 ms — reading location is invisible) ;
+- Frames: since 2026 LinkedIn draws classic job search inside a same-origin frame (`/preload/?_bprMode=vanilla`) whose
+  own URL never changes. The script runs in every LinkedIn frame (all_frames). A copy STARTS only when the address bar
+  (`window.top.location`, same-origin, read-only) shows `/jobs/` AND its own document holds the jobs UI (list / card /
+  `#job-details`); only then does it load settings + li_verdicts and listen to storage changes (idle frames just poll the
+  URL). A running copy goes DORMANT after ~2 s (3 polls) without the jobs UI in its document (drops its own hide CSS,
+  leaves the side panel alone) and only writes the side panel for a job it actually shows (its card, or a detail pane
+  that doesn't name another job). When the address bar leaves `/jobs/`, the running copy stops and the top-frame copy
+  also clears the side panel + badge (the jobs frame may already be gone).
+- Current job: `currentJobId` query param of the ADDRESS BAR (`window.top.location`; own `location` only if top is
+  cross-origin, then the detail title link id) — polled every 700 ms, reading it is invisible ;
   detail title `.job-details-jobs-unified-top-card__job-title` (fallback `.t-24`, `h1`), company `.job-details-jobs-unified-top-card__company-name`,
   JD `#job-details` (fallback `.jobs-description__content`, `.jobs-description-content__text`, `.jobs-box__html-content`).
   JD is "ready" when its text length ≥ 200 and unchanged for 600 ms, and the detail title matches the clicked card (or 8 s timeout).
-- Hiding = background `chrome.scripting.insertCSS({target:{tabId}, css, origin:"USER"})` with
+- Hiding = background `chrome.scripting.insertCSS({target:{tabId, documentIds:[sender.documentId]}, css, origin:"USER"})` with
   `li[data-occludable-job-id="ID"], li.scaffold-layout__list-item:has([data-job-id="ID"]) {display:none !important}` for every id;
-  before inserting the new CSS, `removeCSS` the previous string for that tab (keep last CSS per tabId in memory + storage.session).
+  i.e. into the exact document (frame) that sent liHide. Before inserting the new CSS, `removeCSS` the previous string for that
+  document (records in storage.session `li_css_<tabId>` → `{<documentId>: css}`, newest 6 documents per tab).
   Injected user stylesheets are not part of the page DOM / `document.styleSheets`. NO fallback to inline styles.
 - Hide set = ids hidden by RULES ∪ title-AI rejects ∪ JD-AI rejects (from li_verdicts) ∪ partial-list matches — EXCEPT the currently open job
   (never hide the job the user is looking at; it gets hidden after the user opens another job).

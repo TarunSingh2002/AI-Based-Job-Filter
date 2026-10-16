@@ -10,7 +10,9 @@
 //
 // Frames: LinkedIn now draws classic job search inside a same-origin frame (/preload/?_bprMode=vanilla), so the
 // manifest loads this script into every LinkedIn frame (all_frames). Only the copy whose document holds the jobs
-// list / job description acts (hasJobsUi); it reads the address bar from the top window (pageLocation).
+// list / job description acts (hasJobsUi); it reads the address bar from the top window (pageLocation). A copy whose
+// document loses the jobs UI goes dormant (tick), and the other copies stay idle: they only poll the URL, and the
+// top-frame copy clears the side panel and badge when the address bar leaves /jobs/.
 //
 // Flow:
 //   poll the URL every 700 ms   -> are we on /jobs/? which job is open (currentJobId)?
@@ -36,6 +38,7 @@
   const JD_STABLE_MS = 600;
   const JD_TIMEOUT_MS = 8000;
   const JD_CHECK_MS = 300;
+  const UI_GONE_POLLS = 3;          // polls (~2 s) without the jobs UI before a running copy goes dormant
   const NO_DETAIL = { title: '', company: '', linkId: null, jd: '' };
 
   // Selector arrays are tried in order (first match wins), so a LinkedIn redesign of one class only costs a fallback.
@@ -55,6 +58,7 @@
 
   // ---- state -------------------------------------------------------------------------------------------
 
+  let loadState = 'cold';           // 'cold' -> 'loading' -> 'ready' (or 'failed'): see loadCache()
   let settings = null;              // deep-merged settings from jfLoadSettings()
   let partial = new Set();          // li_partial.items  ("normTitle|company")
   let verdicts = {};                // li_verdicts       (jobId -> verdict)
@@ -66,7 +70,9 @@
   let titleQueue = [];              // latest unscreened visible cards, consumed by runTitleAI()
   let titleKey = '';                // ids in titleQueue, to restart the debounce only when they change
 
-  let onJobsPage = false;
+  let onJobsPage = false;           // this copy is running (its document holds the jobs UI)
+  let uiMisses = 0;                 // polls in a row without the jobs UI while running
+  let wasJobsUrl = false;           // the address bar showed a /jobs/ page at the last poll
   let currentJobId = null;
   let currentPicked = false;        // true when the user chose the open job (not LinkedIn's auto-selected first result)
   let openSeq = 0;                  // bumped on every job switch; async work compares its token against it
@@ -127,6 +133,21 @@
   // overwrite the side panel or send an empty hide list.
   function hasJobsUi() {
     return !!(document.querySelector(SEL.list) || document.querySelector(SEL.card) || first(document, SEL.jd));
+  }
+
+  function hasDetailPane() {
+    return !!(first(document, SEL.detailPane) || first(document, SEL.jd));
+  }
+
+  // True when this document may write the side panel and badge for `jobId`: the job's card is in our list, or a job
+  // detail pane is drawn here and does not name another job. Another copy can still be running for a moment in a
+  // frame that just lost the jobs UI (it goes dormant after UI_GONE_POLLS); it must not overwrite the copy that
+  // actually shows the job.
+  function showsJob(jobId, card) {
+    if (card) return true;
+    if (!hasDetailPane()) return false;
+    const linkId = readDetail().linkId;
+    return !linkId || linkId === jobId;
   }
 
   // The open job: ?currentJobId=X on search/collection pages, or /jobs/view/X/ when a job page is opened directly.
@@ -469,7 +490,9 @@
 
   // Waits until the detail pane shows `jobId` with a settled JD: >= 200 chars, unchanged for 600 ms, not the JD
   // read for the previous job, and the detail matches the card (or 8 s pass). Resolves null if the user opened
-  // another job meanwhile. Only reads: we never scroll or click to make LinkedIn load anything.
+  // another job meanwhile, or if the job has no card here and our pane never showed it by the timeout (showsJob):
+  // the copy in the frame that shows it reports on it. Only reads: we never scroll or click to make LinkedIn load
+  // anything.
   function waitForDetail(jobId, card, token) {
     return new Promise((resolve) => {
       const startedAt = Date.now();
@@ -496,6 +519,7 @@
             // Out of time: use what is there, unless the top card names another job. The previous job's JD text is
             // only trusted when the top-card link names this job (a company can post the same text twice).
             const otherJob = d.linkId ? d.linkId !== jobId : !!(card && d.title && !titlesMatch(card.title, d.title));
+            if (!card && (otherJob || !hasDetailPane())) return resolve(null);   // not ours to report on (showsJob)
             return otherJob || (oldJd && d.linkId !== jobId) ? resolve(NO_DETAIL) : accept(d);
           }
           setTimeout(check, JD_CHECK_MS);
@@ -525,10 +549,10 @@
       waitForDetail(jobId, card, token);   // still learn its JD text, so the next job's wait can tell it apart
       return;
     }
-    if (jdOn) setCurrent(jobId, card, 'reading');
+    if (jdOn && showsJob(jobId, card)) setCurrent(jobId, card, 'reading');
 
     const detail = await waitForDetail(jobId, card, token);
-    if (!detail) return;   // user opened another job or left /jobs/
+    if (!detail) return;   // user opened another job, left /jobs/, or another frame shows this job
     const job = card || { title: detail.title, company: detail.company, location: '', promoted: false };
     if (!card && picked) rememberPartial(job);
     if (!jdOn) return;
@@ -645,8 +669,11 @@
   }
 
   // LinkedIn is a single-page app: leaving /jobs/ keeps this script alive, so we go idle until it comes back.
-  function stop() {
+  // clearPanel is false when only this document lost the jobs UI (the address bar is still on /jobs/): the copy in
+  // the frame that holds it now owns the side panel and badge, so we leave them alone.
+  function stop(clearPanel) {
     onJobsPage = false;
+    uiMisses = 0;
     detachObserver();
     clearTimeout(refreshTimer);
     clearTimeout(titleTimer);
@@ -656,8 +683,8 @@
     openSeq++;                   // cancels a JD wait in progress
     currentJobId = null;
     currentPicked = false;
-    sendHideSet([]);             // nothing to hide outside /jobs/: let background drop its CSS
-    clearCurrent();
+    sendHideSet([]);             // no cards to hide here any more: let background drop this document's CSS
+    if (clearPanel) clearCurrent();
   }
 
   // After the extension is reloaded this orphaned copy can no longer reach it: stop all timers quietly.
@@ -670,19 +697,31 @@
   }
 
   // Reading the URL is invisible to the page, unlike patching history.pushState.
-  // Starts only when this document holds the jobs UI (hasJobsUi); once started it stays on while the address bar
-  // shows a /jobs/ page, so a list that briefly disappears during a re-render doesn't toggle it off and on.
+  // Starts only when the address bar shows a /jobs/ page and this document holds the jobs UI (hasJobsUi). Goes
+  // dormant when the UI has been missing for UI_GONE_POLLS polls in a row (LinkedIn drew it in another frame), so a
+  // list that briefly disappears during a re-render doesn't toggle it off and on.
   function tick() {
     try {
       if (!chrome.runtime || !chrome.runtime.id) return shutdown();
       const page = pageLocation();
       const jobsUrl = /^\/jobs(\/|$)/.test(page.pathname);
+      if (!jobsUrl && onJobsPage) {
+        stop(true);
+      } else if (!jobsUrl && wasJobsUrl && window.top === window) {
+        // The address bar left /jobs/. The frame that held the jobs UI may already be gone (LinkedIn can drop it),
+        // and with it the copy that would clear the side panel and badge, so the top-frame copy clears them.
+        clearCurrent();
+      }
+      wasJobsUrl = jobsUrl;
       if (jobsUrl && !onJobsPage && hasJobsUi()) {
+        if (loadState === 'cold') loadCache();   // calls tick() again once loaded
+        if (loadState !== 'ready') return;
         start();
         lastHref = null;   // check the open job right away
       }
-      if (!jobsUrl && onJobsPage) stop();
       if (!onJobsPage) return;
+      uiMisses = hasJobsUi() ? 0 : uiMisses + 1;
+      if (uiMisses >= UI_GONE_POLLS) return stop(false);
       attachObserver();
       if (page.href === lastHref) return;
       lastHref = page.href;
@@ -717,19 +756,29 @@
     }
   }
 
-  async function init() {
+  // Loaded the first time this document holds the jobs UI, not at page load: every LinkedIn frame runs this script
+  // (all_frames), and only the copy that shows the jobs needs the verdict cache (up to 3000 entries) and its change
+  // events. Idle copies cost only the URL poll.
+  async function loadCache() {
+    loadState = 'loading';
     try {
       settings = await jfLoadSettings();
       const data = await chrome.storage.local.get(['li_partial', 'li_verdicts']);
       partial = new Set((data.li_partial && data.li_partial.items) || []);
       verdicts = data.li_verdicts || {};
     } catch (err) {
-      log('init failed', err);
-      return;   // without settings we cannot decide anything: stay completely idle
+      log('load failed', err);
+      loadState = 'failed';   // without settings we cannot decide anything: stay completely idle
+      return;
     }
     chrome.storage.onChanged.addListener((changes, area) => {
       onStorageChanged(changes, area);
     });
+    loadState = 'ready';
+    tick();   // start now instead of on the next poll
+  }
+
+  function init() {
     pollTimer = setInterval(tick, POLL_MS);
     tick();
   }

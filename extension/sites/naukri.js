@@ -41,8 +41,26 @@ function naukriNextLink() {
   if (!link || !link.href || link.getAttribute('href') === '#') return null;
   const disabled =
     link.hasAttribute('disabled') || link.getAttribute('aria-disabled') === 'true' || /disabled/i.test(link.className);
-  if (disabled || link.href === location.href) return null;
+  if (disabled || new URL(link.href).pathname === location.pathname) return null;
   return link;
+}
+
+/**
+ * The next page's URL WITH the search filters. Naukri's "Next" link holds only the page path (/ai-engineer-jobs-2);
+ * Naukri's own script adds the filters (?k=...&experience=1&jobAge=1) when you click it. Going to the bare link
+ * drops them, and the search explodes from ~200 to ~40,000 jobs. So: the link's path + the current query string
+ * (kept exactly as it is), plus any parameter the link itself carries.
+ */
+function naukriNextUrl(link) {
+  const url = new URL(link.href, location.href);
+  if (!url.search) {
+    url.search = location.search;
+  } else {
+    const params = new URLSearchParams(location.search);
+    new URLSearchParams(url.search).forEach((value, key) => params.set(key, value));
+    url.search = params.toString();
+  }
+  return url.href;
 }
 
 const naukriAdapter = {
@@ -102,7 +120,7 @@ const naukriAdapter = {
   async nextPage() {
     const next = naukriNextLink();
     if (!next) return 'none';
-    location.href = next.href; // full page load; the next page resumes the run from scrape_state
+    location.href = naukriNextUrl(next); // full page load, filters kept; the next page resumes the run from scrape_state
     return 'navigating';
   },
 

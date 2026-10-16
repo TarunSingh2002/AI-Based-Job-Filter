@@ -29,8 +29,9 @@ cd backend && python -m venv .venv && .venv/Scripts/python -m pip install -r req
 check `skills`, and the role types you never want (`avoid_role_families`).
 
 **b) Your Jev key:** open `backend/.env` (it has one line) and paste your OpenCode key after `JEV_API_KEY=`.
-That's the only setting in `.env`. The app uses Jev only, on OpenCode's free model `jev-1.13-free`. When the free
-period ends, change `JEV_MODEL` to `jev-1.13` in [backend/config.py](backend/config.py) (top of the file).
+That's the only setting in `.env`. The app uses Jev only, on OpenCode's paid model `jev-1.13` ($0.042 per 1M input
+tokens, output free), billed to your OpenCode balance. Which model is used is set at the top of
+[backend/config.py](backend/config.py) (`JEV_MODEL`).
 
 **c) Start it** (keep this terminal open while you job-hunt):
 

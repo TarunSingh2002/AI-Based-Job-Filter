@@ -60,8 +60,8 @@ backend/
 ### 2.1 Config
 `backend/.env` holds ONE line: `JEV_API_KEY=<OpenCode or TypeSafe key>`.
 Which Jev is used is two constants at the top of `config.py`:
-`JEV_URL = "https://opencode.ai/inference/v1/systemone"`, `JEV_MODEL = "jev-1.13-free"`
-(OpenCode paid: `jev-1.13`; TypeSafe direct: `https://api.typesafe.ai/v1/systemone` + `jev-latest`).
+`JEV_URL = "https://opencode.ai/inference/v1/systemone"`, `JEV_MODEL = "jev-1.13"` (paid)
+(OpenCode free, rate-limited: `jev-1.13-free`; TypeSafe direct: `https://api.typesafe.ai/v1/systemone` + `jev-latest`).
 OUTPUT_DIR (`output`), DB_PATH (`data/jobs.db`), PROFILE_PATH (`profile.yaml`) have fixed defaults, resolved against
 `backend/` (so results land in `backend/output/`).
 

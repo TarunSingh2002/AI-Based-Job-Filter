@@ -23,7 +23,7 @@ BACKEND_DIR = Path(__file__).resolve().parent
 #   OpenCode paid  : https://opencode.ai/inference/v1/systemone   jev-1.13
 #   TypeSafe direct: https://api.typesafe.ai/v1/systemone         jev-latest
 JEV_URL = "https://opencode.ai/inference/v1/systemone"
-JEV_MODEL = "jev-1.13-free"
+JEV_MODEL = "jev-1.13"  # paid ($0.042 / 1M input tokens, output free) - billed to your OpenCode balance
 
 
 class Settings(BaseSettings):

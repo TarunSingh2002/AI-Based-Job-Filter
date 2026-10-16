@@ -334,11 +334,15 @@ It only READS the DOM and sends messages to background.
   own URL never changes. The script runs in every LinkedIn frame (all_frames). A copy STARTS only when the address bar
   (`window.top.location`, same-origin, read-only) shows `/jobs/` AND its own document holds the jobs UI (list / card /
   JD selectors); only then does it load settings + li_verdicts and listen to storage changes (idle frames just poll the
-  URL). Only a copy whose document shows the jobs UI RIGHT NOW (`ownsPanel`) writes the side panel / badge (li_current,
-  liVerdict). A running copy goes DORMANT after ~3.5 s (5 polls) without the jobs UI in its document (drops its own
-  hide CSS, leaves the side panel alone). When the address bar leaves `/jobs/`, the running copy stops and clears the
-  panel; independently, the top-frame copy clears the side panel + badge once the address bar has named no open job
-  for 2 polls in a row (the jobs frame may already be gone; 2 polls so a quick bounce away and back can't blank it).
+  URL). "Shows the jobs UI" = the UI is in this document AND this frame is on screen (read-only size check of
+  `window.frameElement`), so a hidden frame with a stale list never acts. Only a copy that shows it RIGHT NOW
+  (`ownsPanel`) writes the side panel / badge (li_current, liVerdict); a write it had to skip during a brief re-render is
+  redrawn once it shows the UI again. A running copy goes DORMANT after ~3.5 s (5 polls) without showing the jobs UI
+  (drops its own hide CSS, leaves the side panel alone). An empty card list never sends an empty hide set (re-render:
+  the CSS stays). When the address bar is off `/jobs/` for 2 polls in a row, the running copy stops and clears the panel;
+  independently, the top-frame copy clears the side panel + badge once the address bar (URL only, never the DOM) has
+  named no open job for 2 polls in a row (the jobs frame may already be gone; 2 polls so a quick bounce away and back
+  can't blank it).
 - Current job: `currentJobId` query param of the ADDRESS BAR (`window.top.location`; own `location` only if top is
   cross-origin, then the detail title link id) — polled every 700 ms, reading it is invisible ;
   detail title `.job-details-jobs-unified-top-card__job-title` (fallback `.t-24`, `h1`), company `.job-details-jobs-unified-top-card__company-name`,

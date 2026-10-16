@@ -75,6 +75,8 @@
   let uiMisses = 0;                 // polls in a row without the jobs UI while running
   let topSawJob = false;            // top frame: the address bar named an open job since the last top-frame clear
   let topNoJobPolls = 0;            // top frame: polls in a row without an open job in the address bar
+  let nonJobsPolls = 0;             // polls in a row with the address bar off /jobs/ while running (see tick)
+  let panelMissed = false;          // a side-panel write was skipped while this copy didn't own the panel (see tick)
   let currentJobId = null;
   let currentPicked = false;        // true when the user chose the open job (not LinkedIn's auto-selected first result)
   let openSeq = 0;                  // bumped on every job switch; async work compares its token against it
@@ -140,7 +142,27 @@
   // Only the copy whose document shows the jobs UI right now may write the side panel and badge. A copy in a frame
   // that just lost it (it goes dormant a few polls later) must not overwrite the copy that actually shows the job.
   function ownsPanel() {
-    return onJobsPage && hasJobsUi();
+    return onJobsPage && showsJobsUi();
+  }
+
+  // The jobs UI is in this document AND this frame is on screen: the condition to start, to stay awake (tick) and
+  // to own the side panel.
+  function showsJobsUi() {
+    return hasJobsUi() && frameIsShown();
+  }
+
+  // Is this frame actually on screen? A hidden frame that LinkedIn left with a stale list must not own the side panel.
+  // Only reads the frame element's size, which is invisible to the page.
+  function frameIsShown() {
+    if (window.top === window) return true;
+    try {
+      const frame = window.frameElement;   // null when the parent is cross-origin: nothing to check
+      if (!frame) return true;
+      const box = frame.getBoundingClientRect();
+      return box.width > 0 && box.height > 0;
+    } catch (err) {
+      return true;
+    }
   }
 
   // The open job: ?currentJobId=X on search/collection pages, or /jobs/view/X/ when a job page is opened directly.
@@ -148,7 +170,7 @@
   function jobIdFromUrl() {
     const page = pageLocation();
     let id = new URLSearchParams(page.search).get('currentJobId') || jobIdFromHref(page.pathname);
-    if (!id && page === location) {
+    if (!id && onJobsPage && page === location) {   // only while running: idle copies read just the address bar
       const titleEl = first(document, SEL.detailTitle);
       const link = titleEl && (titleEl.closest('a') || titleEl.querySelector('a[href*="/jobs/view/"]'));
       id = link ? jobIdFromHref(link.getAttribute('href')) : null;
@@ -286,7 +308,8 @@
     const hide = new Set();
     const unscreened = [];
     const openNow = jobIdFromUrl();   // currentJobId can lag the URL by one poll; the job just clicked counts as open too
-    for (const li of document.querySelectorAll(SEL.card)) {
+    const cards = document.querySelectorAll(SEL.card);
+    for (const li of cards) {
       try {
         const id = cardId(li);
         if (!id) continue;
@@ -307,7 +330,9 @@
         log('card skipped', err);
       }
     }
-    sendHideSet(Array.from(hide));
+    // No cards at all = the list is being re-rendered: keep the current CSS (it only targets job ids) instead of
+    // un-hiding everything for a moment. stop() drops it when this copy really stops.
+    if (cards.length) sendHideSet(Array.from(hide));
     queueTitleJobs(unscreened);
   }
 
@@ -453,7 +478,10 @@
   // The open job's state goes to two places that must always agree: li_current (side panel) and the toolbar
   // badge. Background draws the badge from liVerdict: verdict -> score or ✕, {error} -> "!", null -> "…".
   function setCurrent(jobId, job, status, extra) {
-    if (!ownsPanel()) return;
+    if (!ownsPanel()) {
+      if (onJobsPage) panelMissed = true;   // redrawn by tick() once this document shows the jobs UI again
+      return;
+    }
     const value = Object.assign(
       { jobId, title: (job && job.title) || '', company: (job && job.company) || '', status, t: Date.now() },
       extra
@@ -467,7 +495,10 @@
   // neither keeps showing a job that is no longer on screen. jobId null tells background to clear the badge.
   // `force`: clear even though this copy doesn't own the panel (leaving /jobs/, or the top-frame clear in tick()).
   function clearCurrent(force) {
-    if (!force && !ownsPanel()) return;
+    if (!force && !ownsPanel()) {
+      if (onJobsPage) panelMissed = true;
+      return;
+    }
     queueStore(() => chrome.storage.local.set({ li_current: null }));
     send({ type: 'liVerdict', jobId: null, verdict: null });
   }
@@ -611,6 +642,7 @@
     // Compared with the list the previous job was opened on, so a list change that reaches the URL before
     // LinkedIn's pick of the first result still counts as a new list.
     const sameList = currentJobId !== null && listKey() === openedListKey;
+    panelMissed = false;   // the new job's own flow below writes the panel
     currentJobId = id;
     openedListKey = listKey();
     currentPicked = !!id && (sameList || /^\/jobs\/view\//.test(pageLocation().pathname));   // a job page was opened on purpose
@@ -668,6 +700,8 @@
   function stop(clearPanel) {
     onJobsPage = false;
     uiMisses = 0;
+    nonJobsPolls = 0;
+    panelMissed = false;
     detachObserver();
     clearTimeout(refreshTimer);
     clearTimeout(titleTimer);
@@ -715,17 +749,30 @@
       if (!chrome.runtime || !chrome.runtime.id) return shutdown();
       const page = pageLocation();
       const jobsUrl = /^\/jobs(\/|$)/.test(page.pathname);
-      if (!jobsUrl && onJobsPage) stop(true);
       if (window.top === window) topFrameClear();
-      if (jobsUrl && !onJobsPage && hasJobsUi()) {
+      if (!jobsUrl) {
+        // Left /jobs/ - acted on after 2 polls in a row, so a quick bounce away and back neither un-hides the
+        // cards nor blanks the side panel.
+        if (onJobsPage && ++nonJobsPolls >= 2) stop(true);
+        return;
+      }
+      nonJobsPolls = 0;
+      if (!onJobsPage && showsJobsUi()) {
         if (loadState === 'cold') loadCache();   // calls tick() again once loaded
         if (loadState !== 'ready') return;
         start();
         lastHref = null;   // check the open job right away
       }
       if (!onJobsPage) return;
-      uiMisses = hasJobsUi() ? 0 : uiMisses + 1;
+      uiMisses = showsJobsUi() ? 0 : uiMisses + 1;
       if (uiMisses >= UI_GONE_POLLS) return stop(false);
+      // A side-panel write was dropped while the jobs UI was briefly gone (e.g. the JD verdict landed mid re-render):
+      // redraw the open job now that this copy owns the panel again. A cached verdict makes this instant.
+      if (panelMissed && ownsPanel()) {
+        panelMissed = false;
+        if (currentJobId) onJobOpened(currentJobId, ++openSeq).catch((err) => log('job flow failed', err));
+        else clearCurrent();
+      }
       attachObserver();
       if (page.href === lastHref) return;
       lastHref = page.href;

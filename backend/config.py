@@ -10,7 +10,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 import questions
@@ -58,34 +58,51 @@ def get_settings() -> Settings:
 class Profile(BaseModel):
     """The candidate profile (profile.yaml). Every threshold used by decide.py lives here."""
 
-    # A misspelt key ("min_match_scor: 4") would otherwise be dropped silently and the default used,
+    # A misspelt key ("reject_confidense: 0.7") would otherwise be dropped silently and the default used,
     # so unknown keys fail at startup with the key's name.
     model_config = ConfigDict(extra="forbid")
 
     experience_years: int | float  # whole or fractional years, e.g. 1 or 1.5
     experience_tolerance: int | float = 1
-    avoid_role_families: list[str]
-    allowed_seniority: list[str]
-    min_match_score: int = 6
+    target_role_families: list[str]  # the ONLY wanted role types; every other family except "unclear" is unwanted
+    # Optional seniority filter (decide.check_title_words). Absent or [] = off: a "Senior" / "Lead" title is
+    # never rejected for its seniority (the user skips those when applying); years of experience still count.
+    allowed_seniority: list[str] = []
     reject_confidence: float = 0.6
     skills: list[str]
 
-    # A typo like "teaching" instead of "teaching_training" would silently never reject,
+    @model_validator(mode="before")
+    @classmethod
+    def _removed_keys(cls, data):
+        """An old profile.yaml would fail with a bare "extra fields not permitted"; say what changed instead."""
+        if isinstance(data, dict):
+            if "avoid_role_families" in data:
+                raise ValueError("avoid_role_families was replaced by target_role_families "
+                                 "(the role types you WANT, e.g. [ai_ml_engineering, data_science, data_engineering])")
+            if "min_match_score" in data:
+                raise ValueError("min_match_score was removed: skills never reject a job any more - delete that line")
+        return data
+
+    # A typo like "data_scientist" instead of "data_science" would silently never match,
     # so unknown names fail loudly at startup instead.
-    @field_validator("avoid_role_families")
+    @field_validator("target_role_families")
     @classmethod
     def _known_families(cls, value: list[str]) -> list[str]:
-        unknown = set(value) - set(questions.ROLE_FAMILY_CRITERIA)
+        families = [f for f in questions.ROLE_FAMILY_CRITERIA if f != "unclear"]
+        unknown = set(value) - set(families)
         if unknown:
-            raise ValueError(f"unknown role families {sorted(unknown)}; use {list(questions.ROLE_FAMILY_CRITERIA)}")
+            raise ValueError(f"unknown target role families {sorted(unknown)}; use some of {families} "
+                             "(\"unclear\" is never a target: it means \"let the next stage decide\")")
+        if not value:
+            raise ValueError("target_role_families is empty: every job would be unwanted")
         return value
 
     @field_validator("allowed_seniority")
     @classmethod
     def _known_levels(cls, value: list[str]) -> list[str]:
-        unknown = set(value) - set(questions.SENIORITY_CRITERIA)
+        unknown = set(value) - set(questions.SENIORITY_LEVELS)
         if unknown:
-            raise ValueError(f"unknown seniority levels {sorted(unknown)}; use {list(questions.SENIORITY_CRITERIA)}")
+            raise ValueError(f"unknown seniority levels {sorted(unknown)}; use {list(questions.SENIORITY_LEVELS)}")
         return value
 
 

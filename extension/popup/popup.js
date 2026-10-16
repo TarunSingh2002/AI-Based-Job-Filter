@@ -1,7 +1,7 @@
 // Job Filter v2 — popup.
 // Edits chrome.storage.local "settings" (content scripts pick changes up via chrome.storage.onChanged),
-// starts / stops / resumes the Glassdoor, Naukri and Indeed scrapers, and checks the backend.
-// Uses jfLoadSettings / jfMergeSettings from ../common/filters.js.
+// starts / stops / resumes the Glassdoor, Naukri and Indeed scrapers, clears the backend's repost lists,
+// and checks the backend. Uses jfLoadSettings / jfMergeSettings from ../common/filters.js.
 
 const SITE_LABEL = { glassdoor: "Glassdoor", naukri: "Naukri", indeed: "Indeed", linkedin: "LinkedIn" };
 
@@ -50,6 +50,9 @@ function wireEvents() {
   }
   for (const btn of document.querySelectorAll(".scrape [data-action]")) {
     btn.addEventListener("click", safely(() => onScrapeButton(btn.closest(".scrape").dataset.site, btn.dataset.action)));
+  }
+  for (const btn of document.querySelectorAll("[data-dedupe]")) {
+    btn.addEventListener("click", safely(() => clearRepostList(btn)));
   }
   $("save").addEventListener("click", safely(saveSettings));
   $("clearPartial").addEventListener("click", safely(clearPartialList));
@@ -202,7 +205,8 @@ function renderScrape() {
 
     const status = box.querySelector('[data-role="status"]');
     status.textContent = describeState(state);
-    status.dataset.mode = !state ? "idle" : state.paused ? "paused" : state.running ? "running" : "stopped";
+    status.dataset.mode = !state ? "idle" : state.paused ? "paused" : !state.running ? "stopped"
+      : state.waitReason ? "waiting" : "running";
     for (const cell of box.querySelectorAll("[data-count]")) cell.textContent = counts[cell.dataset.count] || 0;
 
     box.querySelector('[data-action="start"]').disabled = !!runningSite || !onSearchPage;
@@ -223,6 +227,11 @@ function describeState(state) {
   if (!state) return "Idle";
   if (state.paused) return "Paused: " + (state.pauseReason || "unknown reason") + ". Fix it in the page, then Resume.";
   const done = (state.pagesDone || 0) + "/" + (state.maxPages || "?") + " pages done";
+  if (state.running && state.waitReason) {
+    // The site said "too fast": every job-page reader waits, then retries by itself (no need to do anything).
+    const retryAt = state.waitUntil ? ", retry at " + new Date(state.waitUntil).toLocaleTimeString() : "";
+    return "Running · " + state.waitReason + retryAt + " · page " + (state.page || 1) + " · " + done;
+  }
   if (state.running) return "Running · page " + (state.page || 1) + " · " + done;
   return "Stopped" + (state.pauseReason ? " (" + state.pauseReason + ")" : "") + " · " + done;
 }
@@ -242,8 +251,17 @@ async function onScrapeButton(site, action) {
   const reply = await sendToTab(tabId, { type: action === "stop" ? "scrapeStop" : "scrapeResume" });
   if (!reply.error) return;
   if (action === "stop" && scrapeState) {
-    // The scraping page is gone (closed / crashed / navigated away): just mark the run stopped.
-    await chrome.storage.local.set({ scrape_state: { ...scrapeState, running: false, paused: false } });
+    // The scraping page is gone (closed / crashed / extension reloaded): mark the run stopped ourselves.
+    // It goes through the background like a scraper's own update, so the red "!" badge is reset too, and
+    // "stopped by user" keeps the background from announcing it as a finished run.
+    const stopped = { ...scrapeState, running: false, paused: false, pauseReason: "stopped by user", waitReason: null, waitUntil: null };
+    let stopReply;
+    try {
+      stopReply = (await chrome.runtime.sendMessage({ type: "scrapeProgress", state: stopped })) || { ok: true };
+    } catch (err) {
+      stopReply = { error: errorText(err) };
+    }
+    if (stopReply.error) hint.textContent = "Could not stop: " + stopReply.error;
   } else {
     hint.textContent = "Could not resume: " + reply.error;
   }
@@ -266,6 +284,22 @@ async function sendToTab(tabId, message) {
 function isSearchPage(site, url) {
   const parsed = parseUrl(url);
   return !!parsed && SEARCH_PAGE_TESTS[site](parsed);
+}
+
+// "Clear repost list": the backend forgets which (title, company) pairs it has already judged for this
+// group (Naukri, or Glassdoor + Indeed together), so the next run judges reposts again instead of hiding them.
+async function clearRepostList(button) {
+  button.disabled = true;
+  let reply;
+  try {
+    reply = (await chrome.runtime.sendMessage({ type: "dedupeClear", group: button.dataset.dedupe })) || { error: "no reply" };
+  } catch (err) {
+    reply = { error: errorText(err) };
+  } finally {
+    button.disabled = false;
+  }
+  if (reply.error) showStatus("Could not clear the repost list: " + reply.error, true);
+  else showStatus("Repost list cleared (" + (reply.cleared || 0) + " jobs)");
 }
 
 

@@ -17,6 +17,9 @@ const INDEED_SEL = {
   next: 'a[data-testid="pagination-page-next"]',
   jdFallback: ['#jobDescriptionText'], // used when the job page has no JSON-LD JobPosting
 };
+// Pause message when job pages stay blocked after the engine's waits (a short 403 / 429 burst never gets here).
+const INDEED_JOB_BLOCKED =
+  'Indeed answers job pages with a security check. Open any job from the list in a new tab, pass the check yourself, then press Resume';
 
 function indeedIsSaved(card) {
   return !!card.querySelector(`${INDEED_SEL.bookmark}[aria-pressed="true"]`);
@@ -24,7 +27,6 @@ function indeedIsSaved(card) {
 
 const indeedAdapter = {
   site: 'indeed',
-  blockReason: null, // set when a job-page fetch hit a check page; reported once by detectBlock()
 
   findCards() {
     return [...document.querySelectorAll(INDEED_SEL.card)].filter(
@@ -59,13 +61,9 @@ const indeedAdapter = {
     await jfsClickAndWait(button, () => indeedIsSaved(li));
   },
 
-  /** Same-origin fetch of the job page; the JD comes from its JSON-LD JobPosting (fallback #jobDescriptionText). */
+  /** Same-origin fetch of the job page; the JD comes from its JSON-LD JobPosting (fallback #jobDescriptionText). → {jd, blocked} */
   async fetchJd(job) {
-    const page = await jfsFetchJobPage(`/viewjob?jk=${encodeURIComponent(job.job_id)}`, INDEED_SEL.jdFallback);
-    if (page.blocked) {
-      this.blockReason = 'Indeed answered a job page with a security check. Open any job from the list in a new tab, pass the check yourself, then press Resume';
-    }
-    return page.jd;
+    return jfsFetchJobPage(`/viewjob?jk=${encodeURIComponent(job.job_id)}`, INDEED_SEL.jdFallback, INDEED_JOB_BLOCKED);
   },
 
   async nextPage() {
@@ -76,9 +74,6 @@ const indeedAdapter = {
   },
 
   detectBlock() {
-    const pending = this.blockReason;
-    this.blockReason = null;
-    if (pending) return pending;
     if (jfsPageLooksBlocked(this.findCards().length > 0)) {
       return 'Indeed is showing a security check / captcha. Solve it yourself, then press Resume';
     }

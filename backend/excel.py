@@ -6,8 +6,11 @@ mangled: 12-digit job ids become 2.71E+11, Naukri ids lose their leading zero, t
 ########. So a couple of seconds after new CSV rows arrive, store.py rebuilds OUTPUT_DIR/YYYY-MM-DD/jobs.xlsx
 from that day's CSVs, with real types:
 
-    Matches    every <site>_matches.csv row, best match_score first (ties: highest confidence first)
+    Matches    every <site>_matches.csv row, best match_score first (ties: highest position_score first)
     Rejected   every <site>_rejected.csv row, newest first
+
+The CSVs are read by column NAME, including the <site>_<kind>.before-HHMMSS.csv files store.py set aside
+when the columns changed: a column an older file doesn't have is just an empty cell.
 
 Each sheet is an Excel Table: click a header arrow to sort or filter. The whole file is regenerated every
 time, so edits saved in jobs.xlsx are lost; use Save As for a copy you want to keep notes in.
@@ -31,20 +34,24 @@ ILLEGAL_XML_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff￾￿]")
 
 # (column, width in characters), in reading order - the CSVs keep their own order.
 MATCH_SHEET = [
-    ("match_score", 13), ("confidence", 12), ("title", 45), ("company", 30), ("site", 11), ("location", 22),
-    ("min_years", 11), ("work_mode", 12), ("role_family", 20), ("link", 7), ("time", 18), ("job_id", 16),
+    ("match_score", 13), ("position_score", 15), ("skills_score", 13), ("confidence", 12), ("title", 45),
+    ("company", 30), ("site", 11), ("location", 22), ("min_years", 11), ("work_mode", 12), ("role_family", 20),
+    ("link", 7), ("time", 18), ("job_id", 16),
 ]
 REJECT_SHEET = [
     ("time", 18), ("site", 11), ("stage", 8), ("title", 45), ("company", 30), ("reason", 40),
     ("confidence", 12), ("link", 7), ("job_id", 16),
 ]
-NUMBER_COLUMNS = {"match_score", "confidence", "min_years"}
+NUMBER_COLUMNS = {"match_score", "position_score", "skills_score", "confidence", "min_years"}
+
+# "naukri_matches.csv" and the set-aside "naukri_matches.before-134501.csv" (see store.py).
+DAY_CSV_RE = re.compile(r"^(?P<site>[a-z]+)_(?P<kind>matches|rejected)(\.before-[\d-]+)?\.csv$")
 
 
 def write_workbook(folder: Path) -> None:
     """Rebuild folder/jobs.xlsx from the CSVs in folder. Raises PermissionError while Excel has it open."""
     matches = _read_csvs(folder, "matches")
-    matches.sort(key=lambda r: (_number(r.get("match_score")) or 0, _number(r.get("confidence")) or 0),
+    matches.sort(key=lambda r: (_number(r.get("match_score")) or 0, _number(r.get("position_score")) or 0),
                  reverse=True)
     rejected = _read_csvs(folder, "rejected")
     rejected.sort(key=lambda r: r.get("time", ""), reverse=True)  # "YYYY-MM-DD HH:MM:SS" sorts as text
@@ -64,11 +71,24 @@ def write_workbook(folder: Path) -> None:
         tmp.unlink(missing_ok=True)
 
 
+def day_csvs(folder: Path, kind: str) -> list[tuple[str, Path]]:
+    """(site, path) of every <site>_<kind>*.csv in a day folder, old column layouts included."""
+    found = []
+    for path in sorted(folder.glob("*.csv")) if folder.exists() else []:
+        m = DAY_CSV_RE.match(path.name)
+        if m and m["kind"] == kind:
+            found.append((m["site"], path))
+    return found
+
+
 def _read_csvs(folder: Path, kind: str) -> list[dict]:
+    """All rows of all files, by column name (DictReader), so files with different headers mix fine."""
     rows = []
-    for path in sorted(folder.glob(f"*_{kind}.csv")):
+    for _, path in day_csvs(folder, kind):
         with open(path, encoding="utf-8-sig", newline="") as f:
-            rows.extend({key: value or "" for key, value in row.items()} for row in csv.DictReader(f))
+            # key None = extra values in a broken row (more values than header columns): ignore them
+            rows.extend({key: value or "" for key, value in row.items() if key is not None}
+                        for row in csv.DictReader(f))
     return rows
 
 

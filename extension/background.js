@@ -3,8 +3,9 @@
 // What lives here:
 //   1. Backend calls: the ONLY place page data leaves the browser, and only to settings.backendUrl.
 //   2. LinkedIn hiding: a USER stylesheet injected into the tab (linkedin.js itself never writes to the page).
-//   3. Toolbar badge per tab: LinkedIn verdict, or matched count while scraping.
+//   3. Toolbar badge per tab: LinkedIn verdict, or matched count while scraping ("!" while a run is paused).
 //   4. Naukri worker window: a minimized window whose tabs open job pages so naukri-job.js can read the JD.
+//   5. Desktop notifications when a Glassdoor / Naukri / Indeed run pauses or finishes (never for LinkedIn).
 //
 // Chrome kills an idle service worker at any time and starts it again on the next event, so global variables
 // can vanish. State that must survive (CSS injected per page, worker window id) is kept in chrome.storage.session.
@@ -18,9 +19,14 @@ importScripts("common/filters.js"); // JF_DEFAULT_SETTINGS, jfLoadSettings
 
 // title: one call holds up to 25 jobs; Jev answers each fast, but retries on 429 can add up,
 // so allow a generous 60 s. Timing out earlier would count an error while the backend keeps working.
-const TIMEOUT_MS = { title: 60000, jd: 60000, health: 5000, stats: 5000 };
+const TIMEOUT_MS = { title: 60000, jd: 60000, health: 5000, stats: 5000, dedupe: 10000 };
 const NAUKRI_JOB_TIMEOUT_MS = 25000;
-const NAUKRI_MAX_TABS = 5; // hard cap, whatever settings.naukri.jdTabs says
+const NAUKRI_MAX_TABS = 4; // hard cap, whatever settings.naukri.jdTabs says (the popup allows 1-4)
+const DEDUPE_GROUPS = ["naukri", "glassdoor_indeed"]; // backend repost lists (Glassdoor + Indeed share one)
+const SCRAPER_LABEL = { glassdoor: "Glassdoor", naukri: "Naukri", indeed: "Indeed" }; // sites that notify
+const NOTIFICATION_ID = "jf-scrape"; // one id: a new notification replaces the previous one
+// 48x48 blue tile with a white funnel. Chrome requires an icon for notifications, and this one needs no file.
+const NOTIFICATION_ICON = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAqElEQVR42u2aOxKAIAwFaT2qV/Yy2tn4BQJ5yWxm7Cx2G/IgKeWhlnXblb7yt9TAq0TU4V8losDfSkSDv0iEFogKf0oggAAC3z95FQIIIGB4CinCVx+javBNfUAJvrmRqcB3dWIF+O4o4Q1vkoU84c3CnBe8aRr1gDeP07Phh9wHZsIPu9DMgkcAAQQQQAABBFIK8LiLAHMyppT5Z8X5Vg1SLHtEXLc5AMidxJ1dNla5AAAAAElFTkSuQmCC";
 const BADGE_COLOR = { pass: "#1a7f37", reject: "#cf222e", busy: "#6e7781" };
 const LI_CSS_KEY = "li_css_"; // storage.session "li_css_<tabId>" → {<documentId>: css} stylesheet in each page of that tab
 const LI_CSS_PAGES_KEPT = 6; // newest pages remembered per tab (about what Chrome's back/forward cache holds)
@@ -35,6 +41,7 @@ const HANDLERS = {
   screenJd: (msg) => postToBackend("/screen/jd", { site: msg.site, job: msg.job }, TIMEOUT_MS.jd),
   health: () => getFromBackend("/health", TIMEOUT_MS.health),
   stats: () => getFromBackend("/stats", TIMEOUT_MS.stats),
+  dedupeClear: (msg) => clearRepostList(msg.group),
   liHide: (msg, sender) => queueLinkedInHide(sender, msg.jobIds),
   liVerdict: (msg, sender) => showLinkedInBadge(sender, msg.jobId, msg.verdict),
   scrapeProgress: (msg, sender) => mirrorScrapeProgress(sender, msg.state),
@@ -75,6 +82,14 @@ async function postToBackend(path, body, timeoutMs) {
 async function getFromBackend(path, timeoutMs) {
   const settings = await jfLoadSettings();
   return callBackend(settings.backendUrl, path, { method: "GET" }, timeoutMs);
+}
+
+// Popup "Clear repost list": the backend forgets the (title, company) pairs it has seen for one group, so
+// reposts are judged again. Not screening, so it works with AI off too. → {cleared: n} or {error}
+async function clearRepostList(group) {
+  if (!DEDUPE_GROUPS.includes(group)) return { error: "unknown repost list: " + group };
+  const settings = await jfLoadSettings();
+  return callBackend(settings.backendUrl, "/dedupe/clear", { method: "POST", body: { group } }, TIMEOUT_MS.dedupe);
 }
 
 // fetch + timeout. Never throws: any failure becomes {error: "..."} for the caller to show or count.
@@ -214,15 +229,22 @@ async function showLinkedInBadge(sender, jobId, verdict) {
 
 // ─── 5. Scraper progress ────────────────────────────────────────────────────────────────────────
 
-// Scrapers report their state here; the popup reads it from storage and the badge shows matched count.
+// Scrapers report their state here; the popup reads it from storage and the badge shows matched count
+// (a red "!" while the run is paused and waits for you).
 // A content script can't know its own tab id, so we stamp it from the sender: the tab-closed cleanup
 // (markScrapeStopped) and the popup's Stop / Resume both need scrape_state.tabId.
+// The popup also sends one ("stopped by user") when Stop can't reach the scraping page; it has no sender
+// tab, so the tabId already in the state is kept.
 async function mirrorScrapeProgress(sender, state) {
   if (!state || typeof state !== "object") return { error: "missing state" };
   const tabId = sender.tab ? sender.tab.id : state.tabId;
   await chrome.storage.local.set({ scrape_state: { ...state, tabId } });
-  const matched = (state.counts && state.counts.matched) || 0;
-  await setBadge(tabId, String(matched), BADGE_COLOR.pass);
+  if (state.paused) {
+    await setBadge(tabId, "!", BADGE_COLOR.reject);
+  } else {
+    const matched = (state.counts && state.counts.matched) || 0;
+    await setBadge(tabId, String(matched), BADGE_COLOR.pass);
+  }
   return { ok: true };
 }
 
@@ -233,6 +255,58 @@ async function markScrapeStopped(onlyTabId, reason) {
   if (!state || !state.running) return;
   if (onlyTabId != null && state.tabId !== onlyTabId) return;
   await chrome.storage.local.set({ scrape_state: { ...state, running: false, paused: false, pauseReason: reason } });
+}
+
+// A run that pauses (captcha, login wall, site still blocking after the rate-limit waits, backend down) waits
+// for you, and you may be in another window, so it pops a desktop notification. So does a finished run.
+// before / after = scrape_state before and after a change (see the storage listener in section 7).
+async function notifyScrapeChange(before, after) {
+  if (!after || !SCRAPER_LABEL[after.site]) return; // only the scrapers; LinkedIn never notifies
+  const site = SCRAPER_LABEL[after.site];
+  if (after.running && after.paused && !(before && before.paused)) {
+    await notify(site + " paused", after.pauseReason || "unknown reason");
+  } else if (before && before.running && !after.running && after.pauseReason !== "stopped by user") {
+    await notify(site + " finished", scrapeSummary(after)); // (no notification when you pressed Stop yourself)
+  }
+}
+
+// "no more pages · 3 pages. 12 matched, 48 rejected by AI, 15 reposts hidden, 30 hidden by rules, 1 error"
+function scrapeSummary(state) {
+  const c = state.counts || {};
+  const parts = [
+    (c.matched || 0) + " matched",
+    (c.titleRejected || 0) + (c.jdRejected || 0) + " rejected by AI",
+    (c.duplicates || 0) + " reposts hidden",
+    (c.ruleHidden || 0) + " hidden by rules",
+  ];
+  if (c.errors) parts.push(c.errors + (c.errors === 1 ? " error" : " errors"));
+  const pages = (state.pagesDone || 0) + (state.pagesDone === 1 ? " page" : " pages");
+  return (state.pauseReason || "done") + " · " + pages + ". " + parts.join(", ") + ".";
+}
+
+async function notify(title, message) {
+  if (!chrome.notifications) return; // "notifications" permission missing: nothing to show
+  try {
+    await chrome.notifications.create(NOTIFICATION_ID, {
+      type: "basic",
+      iconUrl: NOTIFICATION_ICON,
+      title: "Job Filter: " + title,
+      message: String(message).slice(0, 300),
+      priority: 1,
+    });
+  } catch (err) {
+    logError("notification")(err);
+  }
+}
+
+// Clicking the notification brings the scraping tab to the front.
+async function showScrapeTab(notificationId) {
+  if (notificationId !== NOTIFICATION_ID) return;
+  await chrome.notifications.clear(notificationId);
+  const { scrape_state: state } = await chrome.storage.local.get("scrape_state");
+  if (!state || state.tabId == null) return;
+  const tab = await chrome.tabs.update(state.tabId, { active: true });
+  await chrome.windows.update(tab.windowId, { focused: true });
 }
 
 
@@ -409,15 +483,23 @@ chrome.windows.onRemoved.addListener(async (windowId) => {
   }
 });
 
-// scrape_state.running went true → false (finished, stopped, tab closed): close the Naukri worker window.
+// scrape_state changed: notify on pause / finish (section 5); and when running went true → false (finished,
+// stopped, tab closed), close the Naukri worker window.
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes.scrape_state) return;
   const before = changes.scrape_state.oldValue;
   const after = changes.scrape_state.newValue;
+  notifyScrapeChange(before, after).catch(logError("notify"));
   if (before && before.running && !(after && after.running)) {
     closeNaukriWorker("stopped").catch(logError("close worker window"));
   }
 });
+
+if (chrome.notifications) {
+  chrome.notifications.onClicked.addListener((id) => {
+    showScrapeTab(id).catch(logError("show scraping tab")); // the tab may be closed by now
+  });
+}
 
 // After a browser restart nothing can still be scraping (tab ids changed too).
 chrome.runtime.onStartup.addListener(() => {

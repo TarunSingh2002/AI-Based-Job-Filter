@@ -5,27 +5,33 @@ experience_years: 1            # SET THIS: your years of work experience
 experience_tolerance: 2        # accept jobs asking for up to experience_years + this many years
                                # (and treat jobs capped below experience_years - this as "overqualified")
 
-# ── Role types to hide ────────────────────────────────────────────────────────────────────────────
-# Possible values: ai_ml_engineering, software_engineering, data_analytics, teaching_training,
-#                  ai_data_annotation, internship, research_academic, non_technical, unclear
-avoid_role_families: [teaching_training, ai_data_annotation, internship, research_academic, non_technical]
+# ── The positions you want (position first: skills never reject a job) ──────────────────────────
+# Only these role types are wanted. Every other type is unwanted and rejected when the AI is sure
+# (its probabilities for unwanted types add up to >= reject_confidence), however well the skills match.
+# All types: ai_ml_engineering, data_science, data_engineering, backend_software, data_analytics,
+#            qa_testing, devops_cloud_it, other_engineering, teaching_training, ai_data_annotation,
+#            internship, research_academic, non_technical
+# ("unclear" is never wanted nor unwanted: an unclear title goes on to the job-description stage.)
+target_role_families: [ai_ml_engineering, data_science, data_engineering]
 
-# Title stage: seniority levels you accept (entry, mid, senior, lead_plus). The rest are rejected
-# when the AI is confident.
-allowed_seniority: [entry, mid]
+# ── Seniority: OFF ──────────────────────────────────────────────────────────────────────────────
+# Seniority words in the title (Senior, Lead, Manager, ...) do NOT reject a job - you skip those yourself
+# when applying. Too many YEARS still rejects (experience_years + experience_tolerance above).
+# To turn the seniority filter back on, uncomment the last line and list the levels you accept
+# (entry, mid, senior, lead_plus). They are read from the title words, no AI (checked before the AI is
+# asked, so a too-senior title costs nothing):
+#   lead_plus = lead, principal, staff, architect, manager, head, director, VP, AVP, SVP, EVP, vice president, chief
+#   senior    = senior, sr, grade III / IV ("Data Scientist III")
+#   entry     = junior, jr, fresher, graduate, trainee, associate, entry level
+#   mid       = none of those words
+# allowed_seniority: [entry, mid]
 
 # ── Thresholds ────────────────────────────────────────────────────────────────────────────────────
-min_match_score: 3             # JD stage: reject when the skills match score (1-10) is below this.
-                               # The AI picks a skills level, decide.py turns it into the score:
-                               #   0 "almost none of the core skills"           -> 1
-                               #   1 "one or two minor skills, core ones missing" -> 3
-                               #   2 "some overlap" -> 5,  3 "about half" -> 6,  4 "most" -> 8,  5 "nearly all" -> 10
-                               # 3 rejects only level 0 (score 1-2), on purpose: missing skills can be learned.
-                               # So ANY role type not in avoid_role_families above - software_engineering,
-                               # data_analytics and unclear too - passes with a small overlap (e.g. Git, Docker).
-                               # Use 4 to also reject level 1 (core skills missing).
-reject_confidence: 0.6         # only reject on an AI answer whose confidence is >= this (0-1);
+reject_confidence: 0.6         # only reject on a role answer whose unwanted probability is >= this (0-1);
                                # below it the job stays visible ("when in doubt, show it")
+# Match score (0-10) in jobs.xlsx = position (0-5: how surely it is a wanted role type)
+#                                 + skills   (0-5: how well your skills below cover the job's core skills).
+# It only sorts the matches; it never rejects a job (skills can be learned).
 
 # ── Your skills ───────────────────────────────────────────────────────────────────────────────────
 # The JD stage asks how well these cover the core skills each job requires.

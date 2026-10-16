@@ -1,20 +1,26 @@
 """
 The AI flow for ONE job, as a LangGraph graph. Read this file top to bottom to see everything the AI does.
 
-    START ─route─┬─ stage == "title" → ask_title → decide_title ─┐
-                 └─ stage == "jd"    → ask_jd    → decide_jd    ─┴→ record → END
+    START ─route─┬─ stage == "title" → check_title ─ok─→ ask_title → decide_title ─┐
+                 │                          └─ too many years / too senior* ──────┤
+                 └─ stage == "jd"    → ask_jd ───────────────────→ decide_jd ─────┴→ record → END
+                                              * only when profile.yaml sets allowed_seniority (off by default)
 
-    route      Which stage? "title" = cheap check of a job card, "jd" = the full job description.
-    ask_*      Ask the AI provider a few simple questions (questions.py). The AI never decides anything.
-    decide_*   Plain code turns the answers into pass / reject using profile.yaml (decide.py).
-    record     Append the CSV row (jobs.xlsx follows a moment later) and cache the verdict in SQLite (store.py).
+    route        Which stage? "title" = cheap check of a job card, "jd" = the full job description.
+    check_title  Free checks in plain code first: too many years on the card (or, only when profile.yaml
+                 sets allowed_seniority, a seniority word in the title) rejects the job whatever its type,
+                 so the AI is not asked (decide.py).
+    ask_*        Ask the AI provider a few simple questions (questions.py). The AI never decides anything.
+    decide_*     Plain code turns the answers into pass / reject using profile.yaml (decide.py).
+    record       Append the CSV row (jobs.xlsx follows a moment later) and cache the verdict in SQLite (store.py).
 
 If the AI call fails, ask_* stores the error instead of answers, decide_* PASSES the job with reason
 "ai_error: ..." (our own failure must never hide a job), and record writes nothing, so the next run
 asks again.
 
-Two things happen before the graph, in app.py: the SQLite cache lookup (a job seen before never reaches
-the AI again) and the "JD too short" fallback to the title stage.
+Three things happen before the graph, in app.py: the SQLite cache lookup (a job seen before never reaches
+the AI again), the repost check (a copy of a job already screened on the same site group is hidden
+without reaching the AI, dedupe.py) and the "JD too short" fallback to the title stage.
 """
 
 import logging
@@ -43,6 +49,7 @@ class JobState(TypedDict):
 
 def build_graph(provider: Provider, profile: Profile, store: Store):
     """Wire the steps together. Provider, profile and store are passed in, built once at startup by app.py."""
+    title_questions = questions.title_questions(profile.target_role_families)
 
     # ── 1. Which stage? ─────────────────────────────────────────────────────────────────────────
 
@@ -50,16 +57,25 @@ def build_graph(provider: Provider, profile: Profile, store: Store):
         """The caller picks the stage; this just follows it."""
         return state["stage"]
 
+    async def check_title(state: JobState) -> dict:
+        """Free checks before paying for the AI: the card asking for more years than profile.yaml allows
+        (or "Senior" / "Lead" in the title, if profile.yaml sets allowed_seniority) is a certain reject
+        (verdict set -> straight to record)."""
+        return {"verdict": decide.check_title_words(state["job"], profile)}
+
+    def after_check(state: JobState) -> str:
+        return "record" if state["verdict"] else "ask_title"
+
     # ── 2. Ask the AI - simple questions only ───────────────────────────────────────────────────
 
     async def ask_title(state: JobState) -> dict:
-        """What type of work does this title describe, and what seniority does it state?"""
-        return await ask(questions.title_state(state["job"]), questions.TITLE_QUESTIONS)
+        """One question: what type of work does this title describe?"""
+        return await ask(questions.title_state(state["job"]), title_questions)
 
     async def ask_jd(state: JobState) -> dict:
         """What is the real day-to-day work, how well do the skills match, where is the work done?
         The minimum years are only asked when experience.py could not read them: numbers from code
-        beat numbers from a model."""
+        beat numbers from a model. The JD is cleaned and capped first (questions.clean_jd)."""
         job = state["job"]
         years_known = parse_job_years(job.get("experience_text"), job.get("jd")) is not None
         jd_questions = questions.jd_questions(profile.skills, ask_min_years=not years_known)
@@ -75,13 +91,14 @@ def build_graph(provider: Provider, profile: Profile, store: Store):
     # ── 3. Decide in plain code ─────────────────────────────────────────────────────────────────
 
     async def decide_title(state: JobState) -> dict:
-        """Avoided role type? Too senior? Card asks for too many years? Otherwise on to the JD stage."""
+        """Unwanted role type (when the AI is sure)? Otherwise on to the JD stage."""
         if state["error"]:
             return {"verdict": decide.error_verdict(state["job"], "title", f"ai_error: {state['error']}")}
         return {"verdict": decide.decide_title(state["job"], state["answers"], profile)}
 
     async def decide_jd(state: JobState) -> dict:
-        """Avoided role type? Too many years? Overqualified? Skills match too low? Otherwise it's a match."""
+        """Unwanted role type? Too many years? Overqualified? Otherwise it's a match, scored
+        position (0-5) + skills (0-5). Skills never reject: they can be learned."""
         if state["error"]:
             return {"verdict": decide.error_verdict(state["job"], "jd", f"ai_error: {state['error']}")}
         return {"verdict": decide.decide_jd(state["job"], state["answers"], profile)}
@@ -113,13 +130,16 @@ def build_graph(provider: Provider, profile: Profile, store: Store):
     # ── Wiring: exactly the diagram at the top of this file ─────────────────────────────────────
 
     graph = StateGraph(JobState)
+    graph.add_node("check_title", check_title)
     graph.add_node("ask_title", ask_title)
     graph.add_node("ask_jd", ask_jd)
     graph.add_node("decide_title", decide_title)
     graph.add_node("decide_jd", decide_jd)
     graph.add_node("record", record)
 
-    graph.add_conditional_edges(START, route, {"title": "ask_title", "jd": "ask_jd"})
+    graph.add_conditional_edges(START, route, {"title": "check_title", "jd": "ask_jd"})
+    
+    graph.add_conditional_edges("check_title", after_check, {"ask_title": "ask_title", "record": "record"})
     graph.add_edge("ask_title", "decide_title")
     graph.add_edge("ask_jd", "decide_jd")
     graph.add_edge("decide_title", "record")

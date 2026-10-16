@@ -87,6 +87,13 @@
           </select>
         </label>
         <label class="inline">Max pages <input type="number" min="1" max="100" data-setting="glassdoor.maxPages"></label>
+        <label class="inline">Job pages read at once <input type="number" min="1" max="4" data-setting="glassdoor.jdParallel"></label>
+      </fieldset>
+      <fieldset>
+        <legend>Reposts</legend>
+        <p class="hint">A job reposted under the same title + company is judged once; its copies are hidden.
+          Glassdoor and Indeed share this list.</p>
+        <button type="button" class="small danger" data-dedupe="glassdoor_indeed">Clear repost list</button>
       </fieldset>
       <p class="hint">"Save processed" clicks the site's own Save button, so "hide saved" skips those jobs next time.</p>
     </section>
@@ -107,6 +114,11 @@
         <label class="inline">Max pages <input type="number" min="1" max="100" data-setting="naukri.maxPages"></label>
         <label class="inline">Job pages open at once <input type="number" min="1" max="4" data-setting="naukri.jdTabs"></label>
       </fieldset>
+      <fieldset>
+        <legend>Reposts</legend>
+        <p class="hint">A job reposted under the same title + company is judged once; its copies are hidden.</p>
+        <button type="button" class="small danger" data-dedupe="naukri">Clear repost list</button>
+      </fieldset>
       <p class="hint">Naukri descriptions are read from the real job pages in a minimized window, which closes when
         scraping stops.</p>
     </section>
@@ -124,6 +136,13 @@
           </select>
         </label>
         <label class="inline">Max pages <input type="number" min="1" max="100" data-setting="indeed.maxPages"></label>
+        <label class="inline">Job pages read at once <input type="number" min="1" max="4" data-setting="indeed.jdParallel"></label>
+      </fieldset>
+      <fieldset>
+        <legend>Reposts</legend>
+        <p class="hint">A job reposted under the same title + company is judged once; its copies are hidden.
+          Glassdoor and Indeed share this list.</p>
+        <button type="button" class="small danger" data-dedupe="glassdoor_indeed">Clear repost list</button>
       </fieldset>
     </section>
 
@@ -138,6 +157,9 @@
         <button type="button" id="checkHealth" class="small">Check</button>
       </div>
       <p class="hint">Start it from <code>backend/</code> with <code>uvicorn app:app --port 8765</code></p>
+      <p class="hint">The roles you want (<code>target_role_families</code>: AI/ML engineering, data science, data
+        engineering), your skills and your years of experience are set in <code>backend/profile.yaml</code>.
+        Restart the backend after editing it.</p>
       <p class="hint" id="csvHint"></p>
     </section>
   </main>
@@ -156,6 +178,7 @@
       <div><b data-count="titleRejected">0</b><span>title rejected</span></div>
       <div><b data-count="jdRejected">0</b><span>JD rejected</span></div>
       <div class="good"><b data-count="matched">0</b><span>matched</span></div>
+      <div><b data-count="duplicates">0</b><span>reposts</span></div>
       <div><b data-count="errors">0</b><span>errors</span></div>
     </div>
     <div class="row">

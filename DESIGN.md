@@ -21,15 +21,21 @@ AI-Based-Job-Filter/       ← repo root (v2; the old v1 code is git tag v1-old-
 card on page
   → [1] RULES (extension, instant, free): blacklisted company / blacklisted title keyword /
          whitelist (title must contain one) / hide saved / promoted handling
-  → [2] TITLE AI (backend /screen/title): title + company (+ card experience text)  → pass | reject
-  → [3] JD AI    (backend /screen/jd):    title + company + full job description    → pass | reject
+  → [2] TITLE    (backend /screen/title): repost of a (title, company) already screened in this site group → hidden,
+                 no AI (2.2); else card years by regex (free, before any AI call) → reject (+ seniority words,
+                 only when profile.yaml sets the optional allowed_seniority — off by default, 2.5);
+                 else AI role type from title + company → pass | reject
+  → [3] JD AI    (backend /screen/jd):    title + company + cleaned job description    → pass | reject
   → pass  → row appended to backend/output/<date>/<site>_matches.csv
   → every reject (title or jd) → row appended to backend/output/<date>/<site>_rejected.csv (for debugging drift)
   → a couple of seconds later: backend/output/<date>/jobs.xlsx rebuilt from that day's CSVs (section 2.7)
 ```
 
 Golden rule from the drift discussion: **the AI answers simple questions; plain code makes the decisions.**
-Numbers (years of experience) are compared in code, never by the model.
+Numbers (years of experience) are compared in code, never by the model; seniority words (an optional filter, off by
+default) are read by a regex.
+**Position first:** a job is rejected for being the wrong TYPE of job (profile.yaml `target_role_families`), never
+for its skills (skills can be learned); skills only feed the match score that sorts jobs.xlsx.
 
 ---------------------------------------------------------------------------------------------------
 
@@ -43,16 +49,17 @@ backend/
   app.py              FastAPI app + endpoints (section 2.2)
   graph.py            LangGraph graph (section 2.3) — must read top-to-bottom like a story
   questions.py        THE PROMPT: all question definitions for title + JD stages (section 2.4)
-  decide.py           pure-code decisions (thresholds, experience comparison) — no AI here
+  decide.py           pure-code decisions (role probabilities, experience comparison, scores, optional seniority regex) — no AI here
   experience.py       regex parser: "3-8 Yrs", "2+ years", "minimum 3 years", "0-1 years", "fresher" → (min,max)
-  store.py            SQLite cache (data/jobs.db) + CSV writer (output/<date>/...) + keeps jobs.xlsx up to date
+  dedupe.py           repost key (normalized title|company) + site groups (section 2.2); company_name() also used by clean_jd
+  store.py            SQLite cache + repost lists (data/jobs.db) + CSV writer (output/<date>/...) + keeps jobs.xlsx up to date
   excel.py            jobs.xlsx builder (openpyxl): the day's CSVs as sortable Excel tables (section 2.7)
   providers/
     __init__.py       get_provider(): always Jev
     base.py           Provider protocol + Answer dataclass
     jev.py            TypeSafe Jev REST provider (httpx, async)
   config.py           JEV_URL / JEV_MODEL constants + pydantic-settings (backend/.env holds only JEV_API_KEY)
-  profile.yaml        candidate profile (skills, experience, avoided role types, thresholds)
+  profile.yaml        candidate profile (skills, experience, wanted role types, reject_confidence, optional seniority)
   .env.example
   requirements.txt    minimal: fastapi, uvicorn, langgraph, httpx, pydantic, pydantic-settings, pyyaml, openpyxl
 ```
@@ -67,7 +74,7 @@ OUTPUT_DIR (`output`), DB_PATH (`data/jobs.db`), PROFILE_PATH (`profile.yaml`) h
 
 ### 2.2 HTTP API (JSON). CORS: allow all origins (extension background calls it).
 
-`GET /health` → `{"ok": true, "provider": "jev", "model": "<model id>", "profile": {"experience_years": n}}`
+`GET /health` → `{"ok": true, "provider": "jev", "model": "<model id>", "profile": {"experience_years": n, "target_role_families": [..]}}`
 
 `POST /screen/title`
 ```json
@@ -81,14 +88,29 @@ OUTPUT_DIR (`output`), DB_PATH (`data/jobs.db`), PROFILE_PATH (`profile.yaml`) h
                  "decision": "pass" | "reject",
                  "reason": "short human text, e.g. 'role: teaching_training (0.94)'",
                  "confidence": 0.0-1.0,
+                 "match_score": null,            // title stage never scores (a cached JD verdict may carry one)
                  "stage": "title" | "jd",        // stage the decision came from
                  "cached": true|false,           // true = came from SQLite, no AI call
-                 "final": true|false } ] }       // true = JD stage already done earlier → extension skips JD fetch
+                 "final": true|false,            // true = JD stage already done earlier → extension skips JD fetch
+                 "duplicate": true|false } ] }   // true = repost of another job (see below): hide, no JD
 ```
 - Results come back in the same order as `jobs`. Jobs are processed concurrently (asyncio.gather, provider-limited).
-- Cache: if (site, job_id) already has a JD-stage verdict → return it with `cached:true, final:true`.
-  If it has a title-stage verdict → return it with `cached:true, final:false` (reject stays reject; pass → extension continues to JD).
-- Provider failure for one job → that job returns `decision:"pass", reason:"ai_error: ..."`, confidence 0 (never hide on error). Not cached.
+- Per job, in this order (steps 1–3 run with no `await` in between, so two copies in one batch dedupe too):
+  1. Cache: if (site, job_id) already has a JD-stage verdict → return it with `cached:true, final:true`.
+     If it has a title-stage verdict → return it with `cached:true, final:false` (reject stays reject; pass → extension continues to JD).
+     Exception: a cached `seniority: <level>` reject that the current profile no longer makes (allowed_seniority
+     removed, or that level added; `decide.outdated_seniority_reject`, 2.5) is ignored → the job goes on to step 2.
+  2. Reposts (`dedupe.py`): group = naukri → `"naukri"`; glassdoor and indeed → `"glassdoor_indeed"` (one shared list:
+     Glassdoor merged into Indeed on 2026-07-01, a third of Glassdoor's jobs also show on Indeed); linkedin → none.
+     key = normalized title + `|` + normalized company (lowercase, punctuation → space, spaces collapsed; trailing company
+     suffixes pvt/private/ltd/limited/inc/llp/llc/corp/corporation/co/company/technologies/technology/solutions/india/
+     plc/pte/gmbh/opc stripped, at least one word kept). No key when title or company is empty. If the key is held by a
+     DIFFERENT (site, job_id) → `{job_id, decision:"reject", reason:"repost of <site> <job_id>", confidence:1.0,
+     stage:"title", cached:true, final:true, duplicate:true, match_score:null}` — no AI call, no CSV row, not cached
+     (so clearing the list brings it back).
+  3. Else the job claims the key (INSERT before the AI runs) and the title stage runs.
+- Provider failure for one job → that job returns `decision:"pass", reason:"ai_error: ..."`, confidence 0 (never hide on error).
+  Not cached (its key stays claimed by it, so the retry of that same job is screened normally).
 
 `POST /screen/jd`
 ```json
@@ -97,17 +119,23 @@ OUTPUT_DIR (`output`), DB_PATH (`data/jobs.db`), PROFILE_PATH (`profile.yaml`) h
 ```
 →
 ```json
-{ "job_id": "str", "decision": "pass" | "reject", "reason": "str",
-  "match_score": 1-10 | null, "confidence": 0.0-1.0,
+{ "job_id": "str", "decision": "pass" | "reject", "reason": "str, e.g. 'position 5/5, skills 3/5'",
+  "match_score": 0-10 | null, "position_score": 0-5 | null, "skills_score": 0-5 | null, "confidence": 0.0-1.0,
   "role_family": "str|null", "min_years": int|null, "max_years": int|null, "work_mode": "str|null",
   "cached": bool, "saved_to_csv": bool, "stage": "jd", "final": true }
 ```
+(`position_score` / `skills_score` are null for verdicts cached before they existed; such an old `match_score` is the
+old 1–10 skills score.)
 - If (site, job_id) already has a JD verdict → return cached, do NOT write CSV again.
 - Empty/too-short JD (< 200 chars) → run title-only logic again and return `decision:"pass", reason:"no_jd"` with
   match_score null, and do NOT cache as final (so a later run can retry).
 - Provider failure → `decision:"pass", reason:"ai_error: ..."`, not cached, not written.
 
-`GET /stats` → `{"date": "YYYY-MM-DD", "sites": {"naukri": {"matches": n, "rejected": n}, ...}}` for today.
+`GET /stats` → `{"date": "YYYY-MM-DD", "sites": {"naukri": {"matches": n, "rejected": n}, ...}}` for today
+(set-aside `.before-HHMMSS` CSVs included, 2.7).
+
+`POST /dedupe/clear` `{"group": "naukri" | "glassdoor_indeed"}` → `{"cleared": n}` — empties that repost list
+(any other group → 422). The popup's "Clear repost list" button.
 
 ### 2.3 LangGraph (`graph.py`)
 
@@ -117,37 +145,54 @@ JobState: site, stage ("title"|"jd"), job (dict), answers (dict|None), verdict (
 ```
 Nodes (each a small async function with a docstring):
 ```
-START ─route─┬─ stage=="title" → ask_title  → decide_title ─┐
-             └─ stage=="jd"    → ask_jd     → decide_jd    ─┴→ record → END
+START ─route─┬─ stage=="title" → check_title ─ok─→ ask_title → decide_title ─┐
+             │                         └─ too many years / too senior* ──────┤
+             └─ stage=="jd"    → ask_jd ───────────────────→ decide_jd ─────┴→ record → END
+                                          * only when profile.yaml sets allowed_seniority (off by default)
 ```
+- `check_title`: `decide.check_title_words` — the card's experience_text and, only when `allowed_seniority` is set,
+  the seniority regex on the title (2.5). Both are certain, so a reject goes straight to `record` (CSV row + cache
+  like any reject) and the AI is not asked. Nothing found → `ask_title`.
 - `ask_title` / `ask_jd`: build state + questions from `questions.py`, call `provider.ask(state, questions)`.
 - `decide_title` / `decide_jd`: call pure functions in `decide.py` → verdict dict (shape = API response fields).
 - `record`: write SQLite cache + CSV row (matches if jd pass; rejected for any reject). Skips writing when `error` set.
   It only queues the day's jobs.xlsx; the rebuild happens later, off the request path (2.7).
 - Errors in ask_* are caught → `error` set → decide_* returns pass with reason "ai_error: ...".
+- Before the graph, in app.py: the cache lookup, the repost check (2.2) and the "JD too short" fallback.
 
 ### 2.4 Questions (`questions.py`) — written per Jev best practices
 (literal instructions, one judgment per question, numbers in code, short state, boundary cases in criteria)
+Jev is paid per input token, so the state is short and the role list (sent with EVERY title call) is terse.
 
-Shared `ROLE_FAMILY_CRITERIA` (Choice; order matters — keep "unclear" last):
+Shared `ROLE_FAMILY_CRITERIA` (Choice; order matters — keep "unclear" last; each ≤ 255 chars):
 ```
-ai_ml_engineering   : Builds or improves AI, machine-learning, deep-learning, GenAI/LLM, NLP or computer-vision systems as an engineer or scientist (AI Engineer, ML Engineer, GenAI/LLM Engineer, Data Scientist, MLOps, Applied Scientist).
-software_engineering: Builds software as a developer where AI/ML is not the main work (backend, full-stack, Python developer, data engineer, DevOps, QA automation).
-data_analytics      : Analyses data or builds reports and dashboards (data analyst, BI analyst) without building ML models.
-teaching_training   : Teaches, trains, tutors, mentors or creates course content for students or learners — trainer, instructor, faculty, lecturer, professor, tutor, teaching assistant, curriculum or content developer — even when the subject is AI, ML or Python.
-ai_data_annotation  : Labels data, or writes, rates or reviews prompts and model answers to train AI models (AI trainer, AI tutor, data annotator, RLHF or LLM evaluator, prompt rater), usually freelance or contract task work.
-internship          : An internship, apprenticeship, trainee or student programme.
-research_academic   : Academic or university research position (PhD, postdoc, research fellow, research associate at a university).
-non_technical       : Sales, marketing, business development, HR, recruiting, customer support, operations or other non-engineering work.
-unclear             : The information given does not make the main type of work clear.
+ai_ml_engineering : Builds, trains, fine-tunes or deploys AI/ML models or LLM apps (RAG, AI agents) as the core work: AI, ML, GenAI, LLM, NLP or computer-vision engineer, MLOps.
+data_science      : Data scientist who builds statistical or ML models (prediction, forecasting, experiments), not mainly reports.
+data_engineering  : Data pipelines, ETL, data warehouses, big-data platforms (Spark, Airflow, Kafka): data engineer.
+backend_software  : Software, backend, full-stack, web or mobile development (Node.js, PHP, Java, .NET, Python web, React), even if it calls an AI API.
+data_analytics    : Data, business or BI analyst, SQL developer or SQL engineer, MIS: reports, dashboards, Excel, Power BI, SQL queries.
+qa_testing        : Software testing, QA, SDET, test automation.
+devops_cloud_it   : DevOps, cloud, SRE, infrastructure, networking, sysadmin, DBA, IT support, cybersecurity (MLOps is ai_ml_engineering).
+other_engineering : Other engineering: embedded, hardware, VLSI, mechanical, civil, electrical, ERP/SAP.
+teaching_training : Teaches, trains or tutors students or learners, or writes course content (trainer, faculty, lecturer), even about AI or Python.
+ai_data_annotation: Labels data or writes/rates prompts and model answers to train AI (AI trainer, AI tutor, annotator, RLHF/LLM evaluator).
+internship        : Internship, apprenticeship, trainee or student programme.
+research_academic : University research post (PhD, postdoc, research fellow).
+non_technical     : Sales, marketing, HR, recruiting, support, operations, product or project management, other non-engineering work.
+unclear           : The information given does not make the main type of work clear.
 ```
 
-TITLE stage — state: `{"job_title", "company", "location"?}` ; questions:
-- `role_family` (choice, ROLE_FAMILY_CRITERIA): "Judging only from `job_title` and `company`, what is the main type of work in this job? If the title could reasonably fit two types, choose unclear."
-- `seniority` (choice): entry = "Fresher, junior, associate, graduate, trainee or level I"; mid = "No seniority word, or level II"; senior = "Senior, Sr. or level III"; lead_plus = "Lead, staff, principal, architect, manager, head, director or VP". Instruction: "Which seniority level does `job_title` state?"
+TITLE stage — only for jobs the free code checks let through (2.3) — state: `{"job_title", "company"}` (location and
+the card's experience text say nothing about the type of work; code reads the experience text) ; ONE question
+(seniority is never asked: it is an optional regex in decide.py, 2.5), built once from profile `target_role_families`
+(`questions.title_questions`):
+- `role_family` (choice, ROLE_FAMILY_CRITERIA): "Judging only from `job_title` and `company`, what is the main type of work in this job? If the title could reasonably fit one of ai_ml_engineering, data_science, data_engineering and also another type (such as "Backend AI Engineer" or "Data Scientist/Analyst"), choose unclear."
+  (unclear is neither wanted nor unwanted → the JD stage decides. The rule names the wanted types on purpose: a
+  title between two UNWANTED types, e.g. "QA / DevOps Engineer", gets real answers and its summed p_unwanted rejects
+  it here instead of paying for a JD call.)
 
-JD stage — state: `{"job_title", "company", "job_description" (cleaned, max 12000 chars)}` ; questions:
-- `role_family` (choice): "According to the responsibilities in `job_description`, what is the main day-to-day work in this job? Judge by what the person will actually do, not by the keywords listed: a job that teaches Python or ML to students is teaching_training even though it mentions Python and ML."
+JD stage — state: `{"job_title", "company", "job_description" (cleaned, max 6000 chars)}` ; questions:
+- `role_family` (choice): "According to the responsibilities in `job_description`, what is the main day-to-day work in this job? Judge by what the person will actually do, not by the job title or the keywords listed: teaching Python or ML to students is teaching_training; building LLM apps, RAG pipelines or AI agents is ai_ml_engineering, but a web or backend app that only calls an AI API is backend_software; a "data scientist" job that is mostly reports, dashboards and SQL queries is data_analytics."
 - `skills_match` (score, 6 levels low→high) with instructions object `{"question": "How well do the skills in `candidate_skills` cover the core technical skills that `job_description` requires?", "candidate_skills": [...from profile]}`:
   0 "Almost none of the required core skills are in the candidate's list"
   1 "One or two minor skills overlap, but the core skills are missing"
@@ -155,29 +200,68 @@ JD stage — state: `{"job_title", "company", "job_description" (cleaned, max 12
   3 "About half of the core skills are in the candidate's list"
   4 "Most core skills are in the candidate's list; one or two important ones are missing"
   5 "Nearly all core skills are in the candidate's list"
-  → match_score (1–10) = round(1 + score * 9 / 5)
+  → skills_score (0–5) = the level, rounded half up (see 2.5)
 - `min_years` (choice) — ONLY asked when experience.py could not parse years from experience_text or the JD:
   "What is the minimum number of years of work experience that `job_description` requires? For a range like 2-5 years, choose the lower number." options: `y0` "Freshers welcome, or 0 years", `y1`…`y7` "N years", `y8_plus` "8 or more years", `not_stated` "No number of years is stated".
 - `work_mode` (choice): remote / hybrid / onsite / not_stated — "Where does `job_description` say the work is done?"
 
+JD cleaning (`clean_jd(jd, company)`, before the JD goes into the state): collapse whitespace; drop SENTENCES (split
+at ". " "! " "? " inside each line) that are pure boilerplate — EEO / equal-opportunity statements, site buttons
+("Apply now", "Easy Apply", "Share this job", "Read more", a bare "Privacy Policy" link, ...), cookie / privacy / terms
+NOTICES (the notice wording: "we use cookies", "cookie settings", "accept our privacy policy" — not the topic, so "join
+cookie data" or "follow our privacy policy" in a duty stays), recruitment-fraud warnings; drop the employer blurb
+from its heading to the end when the heading is in the second half and nothing after it talks about the job —
+headings: "About us / the company / our company / the organisation", "Who we are", "Company overview / profile /
+description", "Our company", or "About <name>" when <name> is the job's company (`dedupe.company_name`, suffixes
+stripped); any other "About ..." ("About your work", "About the project") is job content and stays. Cap at 6000
+chars. Safety: a sentence that mentions responsibilities, requirements, qualifications, skills, "N years",
+"experience in/with/of", a degree, "you will" or duties is never dropped; a "sentence" > 500 chars (text without full
+stops) is never dropped; if the result is < 200 chars the uncleaned (whitespace-collapsed) text is used.
+
 ### 2.5 Decisions (`decide.py`, profile.yaml values)
 ```yaml
 experience_years: 1            # YOUR years of experience  ← user must set
-experience_tolerance: 1        # allow jobs asking up to experience_years + tolerance
-avoid_role_families: [teaching_training, ai_data_annotation, internship, research_academic, non_technical]
-allowed_seniority: [entry, mid]   # title stage rejects senior / lead_plus (if confident)
-min_match_score: 6             # JD stage: reject below this
-reject_confidence: 0.6         # only reject on an AI answer whose confidence >= this
-skills: [Python, Machine Learning, Deep Learning, NLP, LLM, RAG, LangChain, LangGraph, GenAI, Data Science,
-         TensorFlow, PyTorch, Pandas, NumPy, SQL, Data Analysis, Generative AI, FastAPI]
+experience_tolerance: 2        # allow jobs asking up to experience_years + tolerance
+target_role_families: [ai_ml_engineering, data_science, data_engineering]   # the ONLY wanted role types
+reject_confidence: 0.6         # reject on the role only when p_unwanted >= this
+skills: [Machine Learning, Deep Learning, ..., Python, PyTorch, LangChain, FastAPI, MLOps, Git]
+# allowed_seniority: [entry, mid]   # OPTIONAL seniority filter (regex below); absent (the shipped profile) or [] = off
 ```
-Title decision: reject if role_family ∈ avoid (conf ≥ reject_confidence) → reason `role: <family> (<conf>)`;
-else reject if seniority ∉ allowed_seniority (conf ≥ reject_confidence) → `seniority: <level> (<conf>)`;
-else reject if experience_text parses and min_years > experience_years + tolerance → `needs <min>+ yrs`; else pass.
-JD decision (in this order): role_family avoid (confident) → reject; min_years (parsed or AI) > exp + tol → reject;
-max_years parsed and max_years < experience_years - tolerance... (ignore when null) → reject `overqualified`;
-match_score < min_match_score → reject `skills <score>/10`; else pass.
-Overall confidence = min(role_family.confidence, skills_match.confidence).
+config.py validates at startup: `target_role_families` non-empty and only known families (not "unclear" — it is
+neither wanted nor unwanted); `allowed_seniority` optional (default `[]`), when given ⊆ {entry, mid, senior, lead_plus};
+unknown keys fail; the removed keys `avoid_role_families` / `min_match_score` fail with a message saying what replaced
+them.
+
+**Seniority is off by default** (2026-10-16, the user's call: "Senior / Lead / Manager" titles are skipped by hand when
+applying, not hidden). Without `allowed_seniority` (or with `[]`) no job is ever rejected for its seniority and the
+regex is not run; years of experience still reject (card, JD). Cached `seniority: <level>` rejects from before are
+screened again when such a job comes back (2.2 step 1); a repost of one (other job id) stays hidden as a repost until
+that repost list is cleared.
+
+Role probabilities (both stages): p_wanted = Σ role_family probabilities over target families; p_unwanted = Σ over
+every family that is neither a target nor "unclear" (so "backend 0.40 + data_analytics 0.25" = 0.65 rejects although
+no single family reaches 0.6). No probabilities from the provider → {choice: confidence}.
+Seniority (only when `allowed_seniority` is set; title stage, regex on the title, checked top-down; whole words with
+"not a letter" on both sides instead of `\b`, so "IN_Senior Associate_Data Science" counts): lead_plus = lead|leader|
+principal|staff|architect|manager(s)|head|director|vp|avp|svp|evp|vice president|chief; senior = senior|sr(.)|iii|iv
+(grades: "Data Scientist III"; not "L3"/"L4", which mean different levels at different companies); entry = junior|jr|
+fresher(s)|graduate|trainee|associate|entry level; else mid. ("Senior Associate" → senior, "Associate Director" →
+lead_plus.)
+
+Title decision, in this order:
+1. Before the AI (`check_title_words`, free): only when `allowed_seniority` is set, reject if seniority ∉
+   allowed_seniority → `seniority: <level>` (confidence 1.0); else reject if experience_text parses and min_years >
+   experience_years + tolerance → `needs <min>+ yrs` (1.0). These rejects have role_family null.
+2. After the AI (`decide_title`): reject if p_unwanted ≥ reject_confidence → reason
+   `role: <most likely unwanted family> (<p_unwanted>)`, confidence p_unwanted; else pass
+   `title ok: <choice> (wanted <p_wanted>)`, confidence = role confidence.
+So with the filter on, a job that is both too senior and an unwanted type is rejected as `seniority: ...` (a reject
+either way); with it off (default), "Senior Data Scientist" / "Lead AI Engineer" go to the role question like any title.
+JD decision (in this order): p_unwanted ≥ reject_confidence → reject `role: ...`; min_years (parsed, or AI when
+confident) > exp + tol → reject; max_years parsed and max_years < experience_years - tolerance → reject `overqualified`;
+else pass `position <p>/5, skills <s>/5`. **No skills reject.**
+position_score = round_half_up(5 × p_wanted) (0–5); skills_score = skills level (0–5); match_score = position + skills
+(0–10, set on JD rejects too). Overall confidence = min(role_family.confidence, skills_match.confidence).
 
 ### 2.6 Provider protocol (`providers/base.py`)
 ```python
@@ -210,15 +294,25 @@ Jev is the only provider. (The offline test suite was removed after v2 shipped; 
 
 ### 2.7 Storage (`store.py`)
 SQLite table `jobs(site, job_id, stage, decision, reason, confidence, match_score, role_family, min_years, max_years, work_mode,
-title, company, location, link, provider, model, created_at, PRIMARY KEY(site, job_id))` — upsert; JD stage overwrites title stage.
+title, company, location, link, provider, model, created_at, position_score, skills_score, PRIMARY KEY(site, job_id))` —
+upsert; JD stage overwrites title stage.
+SQLite table `seen_keys(grp, key, site, job_id, first_seen, PRIMARY KEY(grp, key))` — the repost lists (2.2).
+Migration at startup (an older data/jobs.db): `CREATE TABLE IF NOT EXISTS` for both tables, then `ALTER TABLE jobs ADD
+COLUMN` for position_score / skills_score when missing (old rows: NULL). Nothing is dropped or rewritten; seen_keys starts
+empty (old verdicts are not back-filled into it — they were made under the old rules).
 CSV (UTF-8 with BOM so Excel opens it; header written once):
-`<site>_matches.csv`: `time, site, job_id, title, company, location, match_score, confidence, role_family, min_years, work_mode, link, provider`
+`<site>_matches.csv`: `time, site, job_id, title, company, location, match_score, position_score, skills_score, confidence, role_family, min_years, work_mode, link, provider`
 `<site>_rejected.csv`: `time, site, job_id, stage, title, company, reason, confidence, link, provider`
 Date folder = local date when the row is written: `OUTPUT_DIR/YYYY-MM-DD/`.
+Header change: before appending, an existing non-empty file whose header differs from these columns is renamed to
+`<site>_<kind>.before-HHMMSS.csv` (`-2`, `-3` if taken) and a fresh file is started — rows never go under a
+mismatched header. jobs.xlsx and /stats still read the renamed files.
 
 `OUTPUT_DIR/YYYY-MM-DD/jobs.xlsx` (`excel.py`) — what the user opens; the CSVs stay the source of truth (raw log):
-- Sheet `Matches`: all sites' matches rows, sorted match_score desc, then confidence desc. Columns:
-  `match_score, confidence, title, company, site, location, min_years, work_mode, role_family, link, time, job_id`.
+- Reads EVERY `<site>_matches*.csv` / `<site>_rejected*.csv` of the day (incl. `.before-HHMMSS`) by column NAME;
+  a column a file doesn't have is an empty cell.
+- Sheet `Matches`: all sites' matches rows, sorted match_score desc, then position_score desc. Columns:
+  `match_score, position_score, skills_score, confidence, title, company, site, location, min_years, work_mode, role_family, link, time, job_id`.
 - Sheet `Rejected`: all rejected rows, newest first. Columns: `time, site, stage, title, company, reason, confidence, link, job_id`.
 - Each sheet is an Excel Table (filter buttons; no Table when there are no data rows), frozen header, set widths.
   Numbers are numbers, `time` is a datetime, `job_id` is text (leading zeros kept), `link` is a clickable "open"
@@ -250,12 +344,12 @@ extension/
   sites/indeed.js
   popup/popup.html, popup.js, popup.css
   sidepanel/sidepanel.html, sidepanel.js, sidepanel.css
-  icons/ (none required; default icon is fine)
+  icons/ (none required; default icon is fine; the notification icon is an inline data: PNG in background.js)
 ```
 
 ### 3.1 manifest.json (exact)
-- `"manifest_version": 3`, name "Job Filter v2", version "2.0.0"
-- `"permissions": ["storage", "tabs", "scripting", "sidePanel"]`
+- `"manifest_version": 3`, name "Job Filter v2", version "2.1.0"
+- `"permissions": ["storage", "tabs", "scripting", "sidePanel", "notifications"]` (notifications: scraper pause / finish, 3.5)
 - `"host_permissions": ["https://www.linkedin.com/*", "https://www.glassdoor.com/*", "https://www.glassdoor.co.in/*", "https://www.naukri.com/*", "https://in.indeed.com/*", "https://www.indeed.com/*", "http://localhost:8765/*", "http://127.0.0.1:8765/*"]`
 - `"background": {"service_worker": "background.js"}` (classic, not module)
 - `"action": {"default_popup": "popup/popup.html"}`, `"side_panel": {"default_path": "sidepanel/sidepanel.html"}`
@@ -285,18 +379,22 @@ extension/
   linkedin:  { promotedMode: "partial",   // "show" | "hide" | "partial"
                partialScope: "all",       // "all" = every job you click is remembered; "promoted" = only promoted ones
                hideApplied: true, hideDismissed: true, titleAI: true, jdAI: true },
-  glassdoor: { hideSaved: true, markProcessed: "all", maxPages: 10 },   // markProcessed: "all" | "rejected" | "none"
+  glassdoor: { hideSaved: true, markProcessed: "all", maxPages: 10, jdParallel: 3 },   // markProcessed: "all" | "rejected" | "none"
   naukri:    { hideSaved: true, hidePromoted: true, markProcessed: "all", maxPages: 10, jdTabs: 2 },
-  indeed:    { hideSaved: true, markProcessed: "all", maxPages: 10 }
+  indeed:    { hideSaved: true, markProcessed: "all", maxPages: 10, jdParallel: 3 }
 }
 ```
+`jdParallel` (Glassdoor / Indeed) and `jdTabs` (Naukri, one worker tab each) = how many job pages are read at the same
+time ("lanes", 3.5); the engine clamps them to 1–4.
 Other storage keys (chrome.storage.local):
 - `"li_partial"`: `{ items: ["<normTitle>|<company lower>", ...] }` — LinkedIn partial-hide list (no auto-expiry; user keeps/clears)
 - `"li_verdicts"`: `{ "<jobId>": {decision, stage, reason, confidence, match_score, t} }` — cap 3000 newest
 - `"li_current"`: `{ jobId, title, company, status: "reading"|"scoring"|"done"|"error", verdict?, t }` — side panel renders this
-- `"scrape_state"`: `{ running, site, tabId, page, pagesDone, maxPages, startedAt, counts: {seen, ruleHidden, titleRejected, jdRejected, matched, errors}, paused, pauseReason, pageKey, handoffAt }`
+- `"scrape_state"`: `{ running, site, tabId, page, pagesDone, maxPages, startedAt, counts: {seen, ruleHidden, titleRejected, jdRejected, matched, duplicates, errors}, paused, pauseReason, waitReason, waitUntil, pageKey, handoffAt }`
   (`tabId` is stamped by background from the message sender — content scripts can't know it; `handoffAt` = time of the last
-  "Next page" navigation: the next page's script takes the run over only while it is < 60 s old)
+  "Next page" navigation: the next page's script takes the run over only while it is < 60 s old; `duplicates` = reposts
+  hidden; `waitReason` = e.g. `"waiting 60s (site rate limit)"` and `waitUntil` = its end (ms) while all lanes back off,
+  else null — cleared by pause / stop / end / Resume)
 chrome.storage.session: `"li_partial_prompted"` (true after the keep/clear prompt was shown this browser session).
 **Never** use the page's `localStorage` / `sessionStorage` / cookies / `document.cookie` from any content script.
 
@@ -314,9 +412,10 @@ chrome.storage.session: `"li_partial_prompted"` (true after the keep/clear promp
 | `naukriFetchJd` | naukri.js | `{url, jobId}` | `{jd, title, company, experience_text}` or `{error}` — background opens/reuses a minimized worker window (3.5) |
 | `naukriWorkerHello` | naukri-job.js | `{}` (sent on load) | `{worker: true, jobId}` if this tab is a scraper worker tab, else `{worker: false}` |
 | `naukriJdReady` | naukri-job.js | `{jobId, jd, title, company, experience_text}` or `{jobId, error}` | — |
-| `scrapeProgress` | scrapers | `{state}` | — (background mirrors to storage `scrape_state` + badge text = matched count) |
+| `scrapeProgress` | scrapers; popup (Stop when the scraping page can't be reached: state with `running:false, pauseReason:"stopped by user"`) | `{state}` | — (background mirrors to storage `scrape_state` + badge text = matched count, green; red `!` while `paused`) |
 | `health` | popup/sidepanel | `{}` | backend `/health` or `{error}` |
 | `stats` | sidepanel | `{}` | backend `/stats` or `{error}` |
+| `dedupeClear` | popup | `{group: "naukri" \| "glassdoor_indeed"}` | backend `POST /dedupe/clear` → `{cleared}`, or `{error}` (other groups refused without a request; works with AI off) |
 Popup → content (chrome.tabs.sendMessage): `{type:"scrapeStart"}`, `{type:"scrapeStop"}`, `{type:"scrapeResume"}`, `{type:"scrapeStatus"}`. LinkedIn content script registers NO onMessage listener.
 
 Background never forwards page data anywhere except the backend URL in settings.
@@ -372,27 +471,52 @@ It only READS the DOM and sends messages to background.
   readCard(el): {job_id, title, company, location, experience_text, link, isSaved, isPromoted} | null,
   hideCard(el), highlight(el, "active"|"pass"|"reject"|"skip"),
   markProcessed(el): Promise<void>,          // click the site's own save/bookmark button if not saved
-  fetchJd(job): Promise<string>,             // full JD text ('' if unavailable)
+  fetchJd(job): Promise<{jd, blocked}>,      // jd = full JD text ('' if unavailable); blocked = null, or the pause
+                                             //   message when the job page was a rate limit / check page (403/429/503/challenge)
   nextPage(): Promise<"same-page"|"navigating"|"none">,   // load more on same page, or navigate to next URL
-  detectBlock(): string|null }               // captcha / login wall / cloudflare text → pause reason
+  detectBlock(): string|null }               // captcha / login wall / cloudflare text ON THE RESULTS PAGE → pause reason
 ```
 Engine loop (state persisted in `scrape_state` so it resumes after page navigation): wait for cards → for each new card:
-rules → hide; collect remaining → `screenTitle` in batches of ≤20 → rejects: hide + markProcessed(if markProcessed in {all,rejected});
-passes (not `final`) → for each, sequentially with polite random delay 0.8–2.0 s: `fetchJd` → `screenJd` → hide card, highlight,
-markProcessed(if "all", or "rejected" and rejected) → counts → `scrapeProgress`. Already-final cached jobs are hidden & skipped.
-After the page: random delay 2–4 s → `nextPage()`; stop at `maxPages`, "none", user stop, or `detectBlock()` → `paused` with reason
-(user solves captcha/login themselves, then presses Resume). Never try to solve or bypass a captcha/challenge.
+rules → hide; collect remaining → `screenTitle` in batches of ≤20 →
+- `duplicate: true` (a repost, 2.2) → hide the card at once, `counts.duplicates` +1, `data-jf-state="duplicate"`; NO JD,
+  NO markProcessed (it is not a job we judged);
+- rejects and already-final cached jobs → highlight / hide + markProcessed(if markProcessed in {all,rejected} / "all");
+- passes (not `final`) → the JD stage in **lanes**: `jdParallel` (Glassdoor / Indeed, default 3) or `jdTabs` (Naukri,
+  default 2), clamped 1–4. The lanes share one queue (`shift()`, so no job is read twice); each lane reads one job at a
+  time: polite random gap **300–900 ms** → `fetchJd` → `screenJd` → hide card, highlight, markProcessed(if "all", or
+  "rejected" and rejected; then **150–400 ms** gap) → counts → `scrapeProgress`.
+After the page: random delay **1–2 s** → `nextPage()`; stop at `maxPages`, "none", user stop, or `detectBlock()` → `paused`
+with reason (user solves captcha/login themselves, then presses Resume). Never try to solve or bypass a captcha/challenge.
 On page load each site file calls `JFScraper.resumeIfRunning(adapter)` which continues when `scrape_state.running && site matches && tabId matches`.
+
+Rate-limit back-off (a job page answered 403 / 429 / 503 / a check page = `fetchJd` returned `blocked`): do NOT pause yet.
+A NEW block sets `waitReason "waiting 30s (site rate limit)"` + `waitUntil` and EVERY lane waits (also lanes that were in
+their gap) before its next job page; the blocked lane then retries the SAME job. Still blocked → 60 s, then 120 s; blocked
+after the third wait → pause with `"Still blocked after waiting 30, 60, 120 seconds. <adapter message>"`. A job page that
+answers normally resets the level to 30 s. "New" = the request started after the last block was handled: blocks and
+successes of requests that were already under way then belong to that burst (they join the wait; they don't escalate or
+reset). Waits poll every 0.2 s, so Stop / Pause end even a 120 s wait at once. A blocked job is never finished, hidden
+or counted as an error; after a pause, Resume starts the waits from 30 s again and retries it. A captcha / login wall on
+the RESULTS page still pauses at once (`detectBlock`). Errors: 3 errors in a row (title / JD AI errors, unreadable JD;
+counted across all lanes in completion order) → pause; the first pause reason wins and the other lanes stop.
+
+Notifications (background, `chrome.notifications`, one id `"jf-scrape"` so a new one replaces the last): when
+`scrape_state` of glassdoor / naukri / indeed becomes `paused` → "Job Filter: <Site> paused" + the reason; when `running`
+goes true → false for any reason except "stopped by user" → "Job Filter: <Site> finished" + `"<reason> · N pages. X
+matched, Y rejected by AI, Z reposts hidden, R hidden by rules[, E errors]."`. Never for LinkedIn. Clicking it focuses
+the scraping tab. The toolbar badge of the scraping tab shows a red `!` while paused.
 
 Site specifics (verified live 2026-10-14 unless noted):
 - **Naukri list** (`www.naukri.com/<keyword>-jobs[-N]`): card `.srp-jobtuple-wrapper[data-job-id]`; title `a.title` (attr `title`, href = job page);
   company `a.comp-name`; experience `.expwdth` (e.g. "3-8 Yrs"); location `.locWdth`; saved = `.ni-job-tuple-icon-srpSaveFilled` exists;
   save button `span.save-job-tag` (unsaved has class `un-saved`); promoted wrapper `.cust-job-tuple.srp-tuple.checkbox` (hide its `section`);
-  next page = pagination `a` whose text is "Next" (href like `/ai-engineer-jobs-2`) → `location.href = href`; disabled/missing → "none".
+  next page = pagination `a` whose text is "Next" (href like `/ai-engineer-jobs-2`) → `location.href` = that path WITH the
+  current query string (`naukriNextUrl`: the bare link drops the search filters); disabled/missing → "none".
   JD: the job page is an app shell; its JD API requires reCAPTCHA (do NOT call it). So `fetchJd` sends `naukriFetchJd` → background
-  opens the job URL in a dedicated **minimized worker window** (create once, `focused:false, state:"minimized"`; up to `jdTabs` tabs, reuse them),
+  opens the job URL in a dedicated **minimized worker window** (create once, `focused:false, state:"minimized"`; up to `jdTabs` tabs (max 4), reuse them),
   naukri-job.js on that page waits for the JD, replies `naukriJdReady`, background resolves and navigates the tab to the next URL (or about:blank).
-  Timeout 25 s → `{error:"timeout"}`. Close the worker window when scraping stops.
+  Timeout 25 s → `{error:"timeout"}`; a captcha / "Access Denied" job page → `{error:"blocked"}` → `fetchJd` returns `blocked`
+  (back-off above). Close the worker window when scraping stops.
 - **Naukri job page** (`/job-listings-*`): only acts when background says this tab is a worker tab (naukri-job.js sends `{type:"naukriWorkerHello"}` and
   background replies `{worker:true, jobId}`) — when opened by the user normally it does nothing.
   JD `[class*="JDC__dang-inner-html"]` (fallback `[class*="job-desc-container"]`); title `[class*="jd-header-title"]`;
@@ -415,7 +539,13 @@ Site specifics (verified live 2026-10-14 unless noted):
 ### 3.6 Popup
 Tabs: **Filters** (global blacklist/whitelist/companies textareas, comma separated), **LinkedIn**, **Glassdoor**, **Naukri**, **Indeed**, **AI**.
 - Each site tab: its toggles from settings. Glassdoor/Naukri/Indeed tabs: Start / Stop / Resume buttons + live counts from `scrape_state`
-  (Start only enabled when the active tab is that site's search page). LinkedIn tab: NO scrape button at all; "Open side panel" button
+  (seen, rules hid, title rejected, JD rejected, matched, reposts (= `duplicates`), errors; Start only enabled when the
+  active tab is that site's search page); status line "Running · waiting 60s (site rate limit), retry at <time> · …"
+  during a back-off; "Job pages read at once" (`jdParallel`, 1–4) on Glassdoor / Indeed ("Job pages open at once" =
+  `jdTabs` on Naukri); a **Reposts** box with "Clear repost list" → `dedupeClear` (Naukri: `naukri`; Glassdoor and
+  Indeed: the shared `glassdoor_indeed`), result in the footer. LinkedIn tab: NO scrape button at all; "Open side panel" button
   (`chrome.sidePanel.open({tabId})` from the click handler), partial list count + Clear.
-- AI tab: backend URL, AI on/off, backend health + provider/model (via `health` message), link text "Results (jobs.xlsx + CSV files) are in AI-Based-Job-Filter/backend/output/<today>/".
+- AI tab: backend URL, AI on/off, backend health + provider/model (via `health` message), a note that the wanted roles
+  (`target_role_families`), skills and years of experience are set in `backend/profile.yaml`, and the text
+  "Results (jobs.xlsx + CSV files) are in AI-Based-Job-Filter/backend/output/<today>/".
 - Save writes `settings`; content scripts react via `chrome.storage.onChanged`.

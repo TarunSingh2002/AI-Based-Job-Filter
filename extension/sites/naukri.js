@@ -19,6 +19,9 @@ const NAUKRI_SEL = {
   savedIcon: '.ni-job-tuple-icon-srpSaveFilled', // present only when the job is saved
   saveButton: 'span.save-job-tag', // has class "un-saved" while not saved
 };
+// Pause message when job pages stay blocked after the engine's waits (a short "Access Denied" burst never gets here).
+const NAUKRI_JOB_BLOCKED =
+  'Naukri shows a captcha / "Access Denied" on its job pages. Open any Naukri job page, solve it yourself, then press Resume';
 
 /** Job id from a Naukri job URL: ".../job-listings-ai-engineer-acme-bengaluru-3-to-8-years-141024012345?src=..." */
 function naukriIdFromLink(link) {
@@ -65,7 +68,6 @@ function naukriNextUrl(link) {
 
 const naukriAdapter = {
   site: 'naukri',
-  blockReason: null, // set when a JD worker tab hit a captcha; reported once by detectBlock()
 
   findCards() {
     const regular = [...document.querySelectorAll(NAUKRI_SEL.card)];
@@ -105,16 +107,12 @@ const naukriAdapter = {
 
   /**
    * Naukri's JD API needs reCAPTCHA, so we never call it. The background opens the job page in a
-   * minimized worker window; sites/naukri-job.js reads the rendered JD there and sends it back.
+   * minimized worker window; sites/naukri-job.js reads the rendered JD there and sends it back. → {jd, blocked}
    */
   async fetchJd(job) {
-    if (!/\/job-listings-/.test(job.link)) return ''; // only real job pages run naukri-job.js
+    if (!/\/job-listings-/.test(job.link)) return { jd: '', blocked: null }; // only real job pages run naukri-job.js
     const reply = await jfsSend({ type: 'naukriFetchJd', url: job.link, jobId: job.job_id });
-    if (reply.error === 'blocked') {
-      this.blockReason =
-        'Naukri showed a captcha / "Access Denied" on a job page. Open any Naukri job page, solve it yourself, then press Resume';
-    }
-    return reply.jd || '';
+    return { jd: reply.jd || '', blocked: reply.error === 'blocked' ? NAUKRI_JOB_BLOCKED : null };
   },
 
   async nextPage() {
@@ -125,9 +123,6 @@ const naukriAdapter = {
   },
 
   detectBlock() {
-    const pending = this.blockReason;
-    this.blockReason = null;
-    if (pending) return pending;
     if (jfsPageLooksBlocked(this.findCards().length > 0)) {
       return 'Naukri is showing a captcha / "Access Denied" page. Solve it yourself, then press Resume';
     }

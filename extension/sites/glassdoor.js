@@ -7,7 +7,8 @@
 // Selectors come from the old working extension (chrome-extension/glassdoor-content.js). The list selectors
 // (card, title, company, location, save button, "Show more jobs") were re-checked live on 2026-10-14.
 // The sign-in popup selectors were not (it did not appear), and in that test a job-page fetch got a
-// Cloudflare "Security | Glassdoor" 403 — the run then pauses; the user passes the check, then Resume.
+// Cloudflare "Security | Glassdoor" 403 — the engine then waits 30 / 60 / 120 s and retries; if it is still
+// blocked it pauses, the user passes the check, then Resume.
 // Glassdoor has no page links: "Show more jobs" appends cards to the same list ('same-page').
 
 const GLASSDOOR_SEL = {
@@ -21,6 +22,9 @@ const GLASSDOOR_SEL = {
   modalClose: 'button.CloseButton',
   jdFallback: ['[class*="JobDetails_jobDescription"]', '[data-test="jobDescriptionContent"]', '[class*="jobDescription"]'],
 };
+// Pause message when job pages stay blocked after the engine's waits.
+const GLASSDOOR_JOB_BLOCKED =
+  'Glassdoor answers job pages with a security check. Open any job from the list in a new tab, pass the check yourself, then press Resume';
 
 function glassdoorIsSaved(card) {
   const button = card.querySelector(GLASSDOOR_SEL.saveButton);
@@ -55,7 +59,6 @@ async function glassdoorCloseAuthModal() {
 
 const glassdoorAdapter = {
   site: 'glassdoor',
-  blockReason: null, // set when a job-page fetch hit a check page; reported once by detectBlock()
 
   findCards() {
     return [...document.querySelectorAll(GLASSDOOR_SEL.card)];
@@ -87,14 +90,10 @@ const glassdoorAdapter = {
     await jfsClickAndWait(button, () => glassdoorIsSaved(card));
   },
 
-  /** Same-origin fetch of the job page; JSON-LD JobPosting first, then the JD containers. */
+  /** Same-origin fetch of the job page; JSON-LD JobPosting first, then the JD containers. → {jd, blocked} */
   async fetchJd(job) {
-    if (!job.link) return '';
-    const page = await jfsFetchJobPage(job.link, GLASSDOOR_SEL.jdFallback);
-    if (page.blocked) {
-      this.blockReason = 'Glassdoor answered a job page with a security check. Open any job from the list in a new tab, pass the check yourself, then press Resume';
-    }
-    return page.jd;
+    if (!job.link) return { jd: '', blocked: null };
+    return jfsFetchJobPage(job.link, GLASSDOOR_SEL.jdFallback, GLASSDOOR_JOB_BLOCKED);
   },
 
   /** Clicks "Show more jobs" and waits ≤10 s for the card count to grow (same logic as the old extension). */
@@ -112,9 +111,6 @@ const glassdoorAdapter = {
 
   /** Async (the engine awaits it): first tries to close the sign-in popup, then looks for a challenge page. */
   async detectBlock() {
-    const pending = this.blockReason;
-    this.blockReason = null;
-    if (pending) return pending;
     if (!(await glassdoorCloseAuthModal())) {
       return 'login wall: close the Glassdoor sign-in popup (or sign in), then press Resume';
     }

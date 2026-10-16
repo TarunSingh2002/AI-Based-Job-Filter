@@ -2,9 +2,10 @@
 The HTTP server the Chrome extension talks to.
 
     GET  /health         is the backend up? which provider / model?
-    POST /screen/title   stage 1: a batch of job cards, judged by title
+    POST /screen/title   stage 1: a batch of job cards, judged by title (reposts hidden without the AI)
     POST /screen/jd      stage 2: one job, judged by its full description
     GET  /stats          today's CSV row counts per site
+    POST /dedupe/clear   empty one repost list ("naukri" or "glassdoor_indeed")
 
 Run from backend/:   uvicorn app:app --port 8765
 """
@@ -20,6 +21,7 @@ from pydantic import BaseModel, ConfigDict
 
 import decide
 from config import get_settings, load_profile
+from dedupe import dedupe_group, repost_key
 from graph import build_graph, screen_job
 from providers import get_provider
 from store import Store
@@ -94,10 +96,16 @@ class JdRequest(BaseModel):
     job: JobWithJd
 
 
-TITLE_RESULT_FIELDS = ("job_id", "decision", "reason", "confidence", "match_score", "stage", "cached", "final")
+class DedupeClearRequest(BaseModel):
+    group: Literal["naukri", "glassdoor_indeed"]
+
+
+TITLE_RESULT_FIELDS = (
+    "job_id", "decision", "reason", "confidence", "match_score", "stage", "cached", "final", "duplicate",
+)
 JD_RESULT_FIELDS = (
-    "job_id", "decision", "reason", "match_score", "confidence", "role_family", "min_years", "max_years",
-    "work_mode", "cached", "saved_to_csv", "stage", "final",
+    "job_id", "decision", "reason", "match_score", "position_score", "skills_score", "confidence", "role_family",
+    "min_years", "max_years", "work_mode", "cached", "saved_to_csv", "stage", "final",
 )
 
 
@@ -109,14 +117,17 @@ async def health():
         "ok": True,
         "provider": app.state.provider.name,
         "model": app.state.provider.model,
-        "profile": {"experience_years": app.state.profile.experience_years},
+        "profile": {
+            "experience_years": app.state.profile.experience_years,
+            "target_role_families": app.state.profile.target_role_families,
+        },
     }
 
 
 @app.post("/screen/title")
 async def screen_title(req: TitleRequest):
     """All jobs run at the same time; the provider itself limits how many reach the AI at once.
-    A job listed twice is screened once (run_graph)."""
+    A job listed twice is screened once (run_graph); a repost of another job is not screened (title_verdict)."""
     verdicts = await asyncio.gather(*(title_verdict(req.site, job.as_dict()) for job in req.jobs))
     return {"results": [pick(v, TITLE_RESULT_FIELDS) for v in verdicts]}
 
@@ -145,12 +156,40 @@ async def stats():
     return app.state.store.stats()
 
 
+@app.post("/dedupe/clear")
+async def dedupe_clear(req: DedupeClearRequest):
+    """The popup's "Clear repost list": every (title, company) of that group may be screened once more."""
+    return {"cleared": app.state.store.clear_repost_keys(req.group)}
+
+
 # ── Helpers ─────────────────────────────────────────────────────────────────────────────────────
 
 async def title_verdict(site: str, job: dict) -> dict:
-    """Any cached verdict (title or JD stage) wins; otherwise run the title stage."""
+    """1. a cached verdict (title or JD stage) wins - except an old "seniority: ..." reject that profile.yaml
+       no longer makes (decide.outdated_seniority_reject): that job is screened again;
+    2. else a repost of a job already screened in this site group is hidden without asking the AI
+       (no CSV row, not cached, so clearing the repost list brings it back);
+    3. else this job claims its (title, company) and the title stage runs.
+    Steps 1-3 have no await in between, so of two copies in one batch the first claims, the second is a repost."""
     cached = app.state.store.get_verdict(site, job["job_id"])
-    return cached or await run_graph(site, "title", job)
+    if cached and not decide.outdated_seniority_reject(cached, app.state.profile):
+        return cached
+    original = claim_or_find_original(site, job)
+    if original:
+        log.info("%s title reject repost of %s %s | %s @ %s", site, *original, job["title"], job["company"])
+        return decide.duplicate_verdict(job, *original)
+    return await run_graph(site, "title", job)
+
+
+def claim_or_find_original(site: str, job: dict) -> tuple[str, str] | None:
+    """Claim this job's (title, company) in its site group. Returns the (site, job_id) of the job that
+    claimed it first when that is another job, else None (not a repost, or a site without a group)."""
+    group = dedupe_group(site)
+    key = repost_key(job["title"], job["company"]) if group else None
+    if key is None:
+        return None
+    holder = app.state.store.claim_repost_key(group, key, site, job["job_id"])
+    return holder if holder != (site, job["job_id"]) else None
 
 
 async def run_graph(site: str, stage: str, job: dict) -> dict:

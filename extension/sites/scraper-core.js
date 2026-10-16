@@ -5,8 +5,14 @@
 // Names are prefixed (jfs…) so they never clash with globals from common/filters.js.
 //
 // Pipeline for every card:
-//   rules (instant) → title AI (batches of ≤20) → JD AI (one job at a time, polite random delays;
-//   Naukri: one job per worker tab, `jdTabs` tabs) → highlight / hide / mark with the site's own save button.
+//   rules (instant) → title AI (batches of ≤20; a repost of a job judged before comes back `duplicate` and is
+//   just hidden) → JD AI (several "lanes" at once: `jdParallel` on Glassdoor / Indeed, `jdTabs` worker tabs on
+//   Naukri; each lane reads one job at a time with a short random gap) → highlight / hide / mark with the
+//   site's own save button.
+//
+// Rate limits: a job page answered with 403 / 429 / a check page usually just means "too fast". Then ALL lanes
+// wait 30 s, 60 s, 120 s and retry the same job; the run pauses only when the site still blocks after the third
+// wait. A captcha on the results page itself pauses at once. We never try to solve or get around a captcha.
 //
 // How a run survives "Next page" navigation:
 //   the run lives in chrome.storage.local "scrape_state". A content script cannot know its own tab id
@@ -21,6 +27,14 @@ const JFS_TITLE_BATCH = 20; // max jobs per screenTitle call (DESIGN 3.5)
 const JFS_MAX_ERRORS_IN_ROW = 3; // then pause — the backend or the site is probably down
 const JFS_HANDOFF_MS = 60000; // the next page must pick the run up within a minute of the navigation
 const JFS_JOB_PAGE_TIMEOUT_MS = 20000; // Glassdoor / Indeed job-page fetch gives up after this
+const JFS_MAX_LANES = 4; // at most this many job pages are read at the same time
+const JFS_BACKOFF_SECONDS = [30, 60, 120]; // waits after a blocked job page; still blocked after the last → pause
+// Polite random gaps [min, max] in ms. Short enough to be quick, random so the rhythm is not machine-like.
+const JFS_GAP_MS = {
+  jobPage: [300, 900], // before each job page, per lane
+  resultsPage: [1000, 2000], // before going to the next results page
+  saveClick: [150, 400], // after clicking the site's save button
+};
 const JFS_BLOCK_TITLE_RE = /just a moment|verify you are (a )?human|captcha|access denied|attention required|help us protect|security \| glassdoor/i;
 const JFS_BLOCK_BODY_RE = /just a moment|verify you are (a )?human|are you a robot|captcha|access denied|unusual traffic|help us protect/i;
 const JFS_COLORS = {
@@ -93,8 +107,19 @@ function jfsPaint(el, kind) {
   el.style.setProperty('outline', `3px solid ${color.outline}`, 'important');
   el.style.setProperty('outline-offset', '-3px', 'important');
   el.style.setProperty('background-color', color.background, 'important');
-  if (kind === 'active') el.scrollIntoView({ block: 'center', behavior: 'smooth' }); // lets you watch the run
-  else el.dataset.jfState = kind;
+  if (kind !== 'active') {
+    el.dataset.jfState = kind;
+    return;
+  }
+  // Lets you watch the run. Only scrolls when the card is off-screen, so parallel lanes don't make the list jump.
+  const box = el.getBoundingClientRect();
+  if (box.top < 0 || box.bottom > window.innerHeight) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+/** How many job pages are read at once: <site>.jdParallel (Glassdoor / Indeed) or naukri.jdTabs, 1..4. */
+function jfsJdLanes(siteSettings) {
+  const wanted = siteSettings.jdParallel != null ? siteSettings.jdParallel : siteSettings.jdTabs;
+  return Math.min(Math.max(parseInt(wanted, 10) || 1, 1), JFS_MAX_LANES);
 }
 
 /** Clicks a site button (save / bookmark) and waits until isDone() confirms the new state. */
@@ -190,23 +215,25 @@ function jfsFirstText(root, selectors) {
 }
 
 /**
- * Downloads a job page (same origin, with the user's cookies) and reads its JD:
- * JSON-LD first, then the fallback selectors. `blocked` = the site answered with a check page.
+ * Downloads a job page (same origin, with the user's cookies) and reads its JD: JSON-LD first, then the
+ * fallback selectors. This is the adapter's fetchJd result: {jd, blocked}, where `blocked` is null, or
+ * `blockedMessage` when the site answered with a rate limit / check page (the engine backs off, see readJd).
  */
-async function jfsFetchJobPage(url, fallbackSelectors) {
+async function jfsFetchJobPage(url, fallbackSelectors, blockedMessage) {
   // A job page that never answers must not freeze the run (one Indeed page took 27 s in testing).
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), JFS_JOB_PAGE_TIMEOUT_MS);
   try {
     const res = await fetch(url, { credentials: 'include', signal: controller.signal });
-    if (res.status === 403 || res.status === 429) return { jd: '', blocked: true };
-    if (!res.ok) return { jd: '', blocked: false }; // e.g. 404 = job expired
+    // 403 = check page (Cloudflare), 429 = too many requests, 503 = "come back later" / older check pages
+    if (res.status === 403 || res.status === 429 || res.status === 503) return { jd: '', blocked: blockedMessage };
+    if (!res.ok) return { jd: '', blocked: null }; // e.g. 404 = job expired
     const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-    if (JFS_BLOCK_TITLE_RE.test(doc.title || '')) return { jd: '', blocked: true };
-    return { jd: jfJsonLdJobDescription(doc) || jfsFirstText(doc, fallbackSelectors), blocked: false };
+    if (JFS_BLOCK_TITLE_RE.test(doc.title || '')) return { jd: '', blocked: blockedMessage };
+    return { jd: jfJsonLdJobDescription(doc) || jfsFirstText(doc, fallbackSelectors), blocked: null };
   } catch (e) {
     console.warn('[JobFilter] job page fetch failed:', e); // includes the timeout abort
-    return { jd: '', blocked: false };
+    return { jd: '', blocked: null };
   } finally {
     clearTimeout(timer);
   }
@@ -221,6 +248,8 @@ const JFScraper = {
   activeRunId: 0, // runId of the loop running on this page right now (0 = none)
   done: new Set(), // job ids finished on this page during this run
   errorsInRow: 0,
+  blockLevel: 0, // rate-limit waits in a row so far (index into JFS_BACKOFF_SECONDS)
+  lastBlockAt: 0, // when the last blocked job page started a wait (see backOff)
 
   // ---------- wiring: every site file calls these three on page load ----------
 
@@ -338,9 +367,11 @@ const JFScraper = {
       pagesDone: 0,
       maxPages: Number(siteSettings.maxPages) || 10,
       startedAt: Date.now(),
-      counts: { seen: 0, ruleHidden: 0, titleRejected: 0, jdRejected: 0, matched: 0, errors: 0 },
+      counts: { seen: 0, ruleHidden: 0, titleRejected: 0, jdRejected: 0, matched: 0, duplicates: 0, errors: 0 },
       paused: false,
       pauseReason: null, // why it paused — or, once running is false, why it ended (the popup shows it)
+      waitReason: null, // "waiting 30s (site rate limit)" while all lanes back off (the popup shows it)
+      waitUntil: null, // when that wait ends (ms timestamp)
     };
     this.done.clear();
     await this.save();
@@ -352,7 +383,7 @@ const JFScraper = {
     const state = this.isBusy() ? this.state : await this.loadState();
     this.runId += 1; // the running loop (if any) exits at its next check
     if (!state) return null;
-    Object.assign(state, { running: false, paused: false, pauseReason: 'stopped by user' });
+    Object.assign(state, { running: false, paused: false, pauseReason: 'stopped by user', waitReason: null, waitUntil: null });
     this.state = state;
     await this.save();
     return state;
@@ -380,6 +411,9 @@ const JFScraper = {
     const token = ++this.runId;
     this.activeRunId = token;
     this.errorsInRow = 0;
+    this.blockLevel = 0; // a Resume starts the rate-limit waits from 30 s again
+    this.lastBlockAt = 0;
+    Object.assign(this.state, { waitReason: null, waitUntil: null });
     try {
       while (this.alive(token)) {
         const hasCards = await jfsWaitFor(() => this.adapter.findCards().length > 0, 15000, 500);
@@ -401,7 +435,7 @@ const JFScraper = {
           await this.end('reached max pages');
           return;
         }
-        await jfsRandomSleep(2000, 4000); // polite gap between pages
+        await jfsRandomSleep(...JFS_GAP_MS.resultsPage); // polite gap between results pages
         if (!(await this.canContinue(token))) return;
 
         this.state.pagesDone += 1;
@@ -497,8 +531,10 @@ const JFScraper = {
     const needJd = [];
     for (const item of items) {
       const verdict = verdictById.get(String(item.job.job_id));
-      // final = the JD verdict is already cached → no need to read the JD again
-      if (verdict && (verdict.final || verdict.decision === 'reject')) {
+      if (verdict && verdict.duplicate === true) {
+        this.hideDuplicate(item);
+      } else if (verdict && (verdict.final || verdict.decision === 'reject')) {
+        // final = the JD verdict is already cached → no need to read the JD again
         await this.applyVerdict(token, item, verdict, settings);
         if (!this.alive(token)) return;
       } else {
@@ -507,30 +543,27 @@ const JFScraper = {
     }
     await this.save();
 
-    // One job at a time per lane. Naukri runs `jdTabs` lanes (one per worker tab); the other sites run one.
-    const lanes = Math.max(1, Number((settings[this.adapter.site] || {}).jdTabs) || 1);
+    // Several lanes, each reading one job at a time. JS runs one callback at a time, so shift() hands
+    // every job to exactly one lane: no job is read twice.
+    const lanes = jfsJdLanes(settings[this.adapter.site] || {});
     const lane = async () => {
       while (needJd.length && this.alive(token)) await this.screenJd(token, settings, needJd.shift());
     };
     await Promise.all(Array.from({ length: Math.min(lanes, needJd.length) }, lane));
   },
 
+  /** A repost of a job judged before (same title + company, found by the backend): hide it. No JD, no save click. */
+  hideDuplicate(item) {
+    item.el.dataset.jfState = 'duplicate'; // the passive filter leaves judged cards alone
+    this.adapter.hideCard(item.el);
+    this.finishJob(item.job, 'duplicates');
+  },
+
   /** Step 3 — read the full JD and let the backend judge it. */
   async screenJd(token, settings, item) {
-    await jfsRandomSleep(800, 2000); // polite gap between job pages
-    if (!(await this.canContinue(token))) return;
-
-    this.adapter.highlight(item.el, 'active');
-    let jd = '';
-    try {
-      jd = await this.adapter.fetchJd(item.job);
-    } catch (e) {
-      console.warn('[JobFilter] fetchJd failed:', e);
-    }
-    if (!this.alive(token)) return;
+    const jd = await this.readJd(token, item);
+    if (jd === null) return; // stopped / paused meanwhile: the job stays unfinished and is retried after Resume
     if (!jd) {
-      // A check page instead of the JD → pause; this job stays unfinished and is retried after Resume.
-      if (!(await this.canContinue(token))) return;
       await this.skipJob(item, 'could not read the job description');
       return;
     }
@@ -546,6 +579,73 @@ const JFScraper = {
       return;
     }
     await this.applyVerdict(token, item, verdict, settings);
+  },
+
+  /**
+   * Step 3a — the JD text of one job ('' = none), or null when the run stopped / paused meanwhile.
+   * adapter.fetchJd answers {jd, blocked}. A blocked job page is usually a short rate limit: back off, then
+   * retry the SAME job (backOff decides how long, or pauses).
+   */
+  async readJd(token, item) {
+    for (;;) {
+      if (!(await this.waitOutBackoff(token))) return null; // every lane holds back while the site rate-limits us
+      await jfsRandomSleep(...JFS_GAP_MS.jobPage); // polite gap between job pages; also staggers lanes after a wait
+      if (!(await this.canContinue(token))) return null;
+      if (this.state.waitUntil) continue; // another lane started a wait during our gap: wait as well
+
+      this.adapter.highlight(item.el, 'active');
+      const startedAt = Date.now();
+      let page = null;
+      try {
+        page = await this.adapter.fetchJd(item.job);
+      } catch (e) {
+        console.warn('[JobFilter] fetchJd failed:', e);
+      }
+      if (!this.alive(token)) return null;
+      if (!page || !page.blocked) {
+        if (startedAt > this.lastBlockAt) this.blockLevel = 0; // the site answers normally again
+        return (page && page.jd) || '';
+      }
+      if (!(await this.backOff(token, page.blocked, startedAt))) return null;
+    }
+  },
+
+  /**
+   * A job page came back blocked. A NEW block starts the next wait (30 s → 60 s → 120 s) for all lanes; a block
+   * on a request that was already under way when the last wait began is the same burst, so it just joins that
+   * wait. Still blocked after the last wait → pause with the adapter's message. False = the run must not go on.
+   */
+  async backOff(token, blockedMessage, startedAt) {
+    if (startedAt > this.lastBlockAt) {
+      if (this.blockLevel >= JFS_BACKOFF_SECONDS.length) {
+        await this.pause(`Still blocked after waiting ${JFS_BACKOFF_SECONDS.join(', ')} seconds. ${blockedMessage}`);
+        return false;
+      }
+      const seconds = JFS_BACKOFF_SECONDS[this.blockLevel];
+      this.blockLevel += 1;
+      this.lastBlockAt = Date.now();
+      Object.assign(this.state, {
+        waitReason: `waiting ${seconds}s (site rate limit)`,
+        waitUntil: this.lastBlockAt + seconds * 1000,
+      });
+      console.warn('[JobFilter] job page blocked,', this.state.waitReason);
+      await this.save();
+    }
+    return this.waitOutBackoff(token);
+  },
+
+  /** Waits while a rate-limit wait is on. Polls every 0.2 s, so Stop / Pause end even a 120 s wait at once. */
+  async waitOutBackoff(token) {
+    while (this.alive(token) && this.state.waitUntil) {
+      const left = this.state.waitUntil - Date.now();
+      if (left > 0) {
+        await jfsWaitFor(() => !this.alive(token), left, 200);
+      } else {
+        Object.assign(this.state, { waitReason: null, waitUntil: null }); // over: the popup stops showing it
+        await this.save();
+      }
+    }
+    return this.alive(token);
   },
 
   /** Shows a verdict on the card, counts it, and clicks the site's save button per settings.<site>.markProcessed. */
@@ -579,7 +679,7 @@ const JFScraper = {
         console.warn('[JobFilter] markProcessed failed:', e);
       }
       if (!this.alive(token)) return;
-      await jfsRandomSleep(300, 800); // no rapid-fire save clicks
+      await jfsRandomSleep(...JFS_GAP_MS.saveClick); // no rapid-fire save clicks
     }
     await this.save();
   },
@@ -627,9 +727,10 @@ const JFScraper = {
   },
 
   finishJob(job, countKey) {
+    const counts = this.state.counts;
     this.done.add(job.job_id);
-    this.state.counts.seen += 1;
-    if (countKey) this.state.counts[countKey] += 1;
+    counts.seen += 1;
+    if (countKey) counts[countKey] = (counts[countKey] || 0) + 1; // `|| 0`: a run resumed from an older version
   },
 
   async countError(why) {
@@ -641,7 +742,7 @@ const JFScraper = {
     }
   },
 
-  /** Asks the adapter for a captcha / login wall / challenge. We never try to solve one — we pause. */
+  /** Asks the adapter for a captcha / login wall / challenge ON THE RESULTS PAGE. We never try to solve one — we pause. */
   async pauseIfBlocked() {
     let reason = null;
     try {
@@ -661,14 +762,14 @@ const JFScraper = {
   },
 
   async pause(reason) {
-    if (!this.state.running) return;
-    Object.assign(this.state, { paused: true, pauseReason: reason });
+    if (!this.state.running || this.state.paused) return; // with parallel lanes the first reason wins
+    Object.assign(this.state, { paused: true, pauseReason: reason, waitReason: null, waitUntil: null });
     this.runId += 1; // like stop(): lanes still waiting on a job page exit, and Resume works right away
     await this.save();
   },
 
   async end(reason) {
-    Object.assign(this.state, { running: false, paused: false, pauseReason: reason });
+    Object.assign(this.state, { running: false, paused: false, pauseReason: reason, waitReason: null, waitUntil: null });
     await this.save();
   },
 

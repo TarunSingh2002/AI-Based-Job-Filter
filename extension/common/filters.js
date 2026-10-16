@@ -22,9 +22,11 @@ const JF_DEFAULT_SETTINGS = {
     titleAI: true,
     jdAI: true,
   },
-  glassdoor: { hideSaved: true, markProcessed: "all", maxPages: 10 },   // markProcessed: "all" | "rejected" | "none"
+  // markProcessed: "all" | "rejected" | "none".  jdParallel / jdTabs (Naukri: one worker tab each) = how many job
+  // pages are read at the same time, 1..4.
+  glassdoor: { hideSaved: true, markProcessed: "all", maxPages: 10, jdParallel: 3 },
   naukri: { hideSaved: true, hidePromoted: true, markProcessed: "all", maxPages: 10, jdTabs: 2 },
-  indeed: { hideSaved: true, markProcessed: "all", maxPages: 10 },
+  indeed: { hideSaved: true, markProcessed: "all", maxPages: 10, jdParallel: 3 },
 };
 
 // Read settings from storage and fill anything missing with defaults.

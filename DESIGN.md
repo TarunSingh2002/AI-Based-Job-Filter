@@ -262,7 +262,7 @@ extension/
 - content_scripts (run_at document_idle):
   - linkedin: matches `https://www.linkedin.com/*` → `["common/filters.js", "sites/linkedin.js"]`  (NOTHING else).
     All of LinkedIn, because it is a single-page app: going Feed → Jobs never reloads the page, so a `/jobs/*`-only
-    script would never load. Outside `/jobs/` linkedin.js only reads `location.href` and stays idle.
+    script would never load. Outside `/jobs/` linkedin.js only reads the URL and stays idle (the top-frame copy may clear the side panel, 3.4).
     `"all_frames": true`: since 2026 LinkedIn draws classic job search inside a same-origin frame
     (`/preload/?_bprMode=vanilla`) whose own URL never changes. Every LinkedIn frame gets the script; only the copy
     whose document contains the jobs list / JD acts, and it reads the open job from `window.top.location`.
@@ -309,7 +309,7 @@ chrome.storage.session: `"li_partial_prompted"` (true after the keep/clear promp
 |---|---|---|---|
 | `screenTitle` | any site | `{site, jobs:[job]}` | backend `/screen/title` JSON, or `{error}` |
 | `screenJd` | any site | `{site, job}` (job has `jd`) | backend `/screen/jd` JSON, or `{error}` |
-| `liHide` | linkedin.js | `{jobIds: [..all ids that must be hidden now..]}` | `{ok}` — background replaces the tab's injected CSS (3.4) |
+| `liHide` | linkedin.js | `{jobIds: [..all ids that must be hidden now..]}` | `{ok}` — background replaces the injected CSS of the sending document/frame (3.4) |
 | `liVerdict` | linkedin.js | `{jobId, verdict}` | `{ok}` — background sets badge for that tab |
 | `naukriFetchJd` | naukri.js | `{url, jobId}` | `{jd, title, company, experience_text}` or `{error}` — background opens/reuses a minimized worker window (3.5) |
 | `naukriWorkerHello` | naukri-job.js | `{}` (sent on load) | `{worker: true, jobId}` if this tab is a scraper worker tab, else `{worker: false}` |
@@ -333,11 +333,12 @@ It only READS the DOM and sends messages to background.
 - Frames: since 2026 LinkedIn draws classic job search inside a same-origin frame (`/preload/?_bprMode=vanilla`) whose
   own URL never changes. The script runs in every LinkedIn frame (all_frames). A copy STARTS only when the address bar
   (`window.top.location`, same-origin, read-only) shows `/jobs/` AND its own document holds the jobs UI (list / card /
-  `#job-details`); only then does it load settings + li_verdicts and listen to storage changes (idle frames just poll the
-  URL). A running copy goes DORMANT after ~2 s (3 polls) without the jobs UI in its document (drops its own hide CSS,
-  leaves the side panel alone) and only writes the side panel for a job it actually shows (its card, or a detail pane
-  that doesn't name another job). When the address bar leaves `/jobs/`, the running copy stops and the top-frame copy
-  also clears the side panel + badge (the jobs frame may already be gone).
+  JD selectors); only then does it load settings + li_verdicts and listen to storage changes (idle frames just poll the
+  URL). Only a copy whose document shows the jobs UI RIGHT NOW (`ownsPanel`) writes the side panel / badge (li_current,
+  liVerdict). A running copy goes DORMANT after ~3.5 s (5 polls) without the jobs UI in its document (drops its own
+  hide CSS, leaves the side panel alone). When the address bar leaves `/jobs/`, the running copy stops and clears the
+  panel; independently, the top-frame copy clears the side panel + badge once the address bar has named no open job
+  for 2 polls in a row (the jobs frame may already be gone; 2 polls so a quick bounce away and back can't blank it).
 - Current job: `currentJobId` query param of the ADDRESS BAR (`window.top.location`; own `location` only if top is
   cross-origin, then the detail title link id) — polled every 700 ms, reading it is invisible ;
   detail title `.job-details-jobs-unified-top-card__job-title` (fallback `.t-24`, `h1`), company `.job-details-jobs-unified-top-card__company-name`,

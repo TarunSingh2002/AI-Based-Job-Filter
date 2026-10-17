@@ -6,6 +6,7 @@
 //   3. Toolbar badge per tab: LinkedIn verdict, or matched count while scraping ("!" while a run is paused).
 //   4. Naukri worker window: a minimized window whose tabs open job pages so naukri-job.js can read the JD.
 //   5. Desktop notifications when a Glassdoor / Naukri / Indeed run pauses or finishes (never for LinkedIn).
+//   6. The automation (saved searches one after another) lives in automation.js, loaded below.
 //
 // Chrome kills an idle service worker at any time and starts it again on the next event, so global variables
 // can vanish. State that must survive (CSS injected per page, worker window id) is kept in chrome.storage.session.
@@ -15,7 +16,7 @@
 // Messages: see DESIGN.md 3.3. One extra type used by the side panel:
 //   {type: "stats"} → GET <backend>/stats → {date, sites: {<site>: {matches, rejected}}} or {error}
 
-importScripts("common/filters.js"); // JF_DEFAULT_SETTINGS, jfLoadSettings
+importScripts("common/filters.js", "automation.js"); // JF_DEFAULT_SETTINGS, jfLoadSettings; autoStart, autoStop
 
 // title: one call holds up to 25 jobs; Jev answers each fast, but retries on 429 can add up,
 // so allow a generous 60 s. Timing out earlier would count an error while the backend keeps working.
@@ -48,6 +49,8 @@ const HANDLERS = {
   naukriFetchJd: (msg) => naukriFetchJd(msg.url, msg.jobId),
   naukriWorkerHello: (msg, sender) => naukriWorkerHello(sender),
   naukriJdReady: (msg, sender) => naukriJdReady(sender, msg),
+  autoStart: () => autoStart({ waitForBackend: true }), // popup "Start automation" (automation.js)
+  autoStop: () => autoStop(),
 };
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -262,6 +265,7 @@ async function markScrapeStopped(onlyTabId, reason) {
 // before / after = scrape_state before and after a change (see the storage listener in section 7).
 async function notifyScrapeChange(before, after) {
   if (!after || !SCRAPER_LABEL[after.site]) return; // only the scrapers; LinkedIn never notifies
+  if (after.mode === "automation") return; // the automation sends its own (one when it needs you, one at the end)
   const site = SCRAPER_LABEL[after.site];
   if (after.running && after.paused && !(before && before.paused)) {
     await notify(site + " paused", after.pauseReason || "unknown reason");
@@ -284,10 +288,11 @@ function scrapeSummary(state) {
   return (state.pauseReason || "done") + " · " + pages + ". " + parts.join(", ") + ".";
 }
 
-async function notify(title, message) {
+// id: notifications with the same id replace each other (the automation uses its own, see automation.js).
+async function notify(title, message, id = NOTIFICATION_ID) {
   if (!chrome.notifications) return; // "notifications" permission missing: nothing to show
   try {
-    await chrome.notifications.create(NOTIFICATION_ID, {
+    await chrome.notifications.create(id, {
       type: "basic",
       iconUrl: NOTIFICATION_ICON,
       title: "Job Filter: " + title,
@@ -504,6 +509,12 @@ if (chrome.notifications) {
 // After a browser restart nothing can still be scraping (tab ids changed too).
 chrome.runtime.onStartup.addListener(() => {
   markScrapeStopped(null, "browser restarted").catch(logError("onStartup"));
+});
+
+// Nor after the extension was reloaded / updated: the scraping page's script can no longer reach us, and a run
+// left "running" would keep the popup's Start and "Start automation" off.
+chrome.runtime.onInstalled.addListener(() => {
+  markScrapeStopped(null, "extension reloaded").catch(logError("onInstalled"));
 });
 
 

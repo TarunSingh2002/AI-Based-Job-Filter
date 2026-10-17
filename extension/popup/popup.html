@@ -16,6 +16,7 @@
     <button type="button" data-tab="glassdoor">Glassdoor</button>
     <button type="button" data-tab="naukri">Naukri</button>
     <button type="button" data-tab="indeed">Indeed</button>
+    <button type="button" data-tab="automation">Automation</button>
     <button type="button" data-tab="ai">AI</button>
   </nav>
 
@@ -45,6 +46,8 @@
       <p class="hint">Read-only on LinkedIn: no clicks, no scrolling, no scraping. Cards are hidden by a browser
         stylesheet; verdicts show in the side panel and the toolbar badge.</p>
       <button type="button" id="openSidePanel" class="primary wide">Open side panel</button>
+      <p class="hint" id="noSidePanel" hidden>This browser (e.g. Opera) has no side panel for extensions. The
+        verdict of the job you open still shows on the extension icon: green score = match, red ✕ = hidden.</p>
 
       <fieldset>
         <legend>Promoted jobs</legend>
@@ -144,6 +147,52 @@
           Glassdoor and Indeed share this list.</p>
         <button type="button" class="small danger" data-dedupe="glassdoor_indeed">Clear repost list</button>
       </fieldset>
+    </section>
+
+    <section class="panel" id="tab-automation" hidden>
+      <p class="hint">Runs your saved searches one after another (Naukri, then Indeed, then Glassdoor) with the
+        settings of each site tab. Runs in its own window. You can keep working in other apps; see README
+        'Run while you work' so the browser doesn't slow the window down.</p>
+      <div class="auto-box">
+        <div class="status" id="autoStatus">Idle</div>
+        <ol class="auto-items" id="autoItems"></ol>
+        <p class="hint" id="autoLast"></p>
+        <div class="row">
+          <button type="button" class="primary" id="autoStart">Start automation</button>
+          <button type="button" id="autoStop">Stop automation</button>
+        </div>
+        <p class="hint" id="autoHint"></p>
+      </div>
+      <fieldset>
+        <legend>Saved searches <em>(one link per line)</em></legend>
+        <label class="field">
+          <span>Naukri</span>
+          <textarea rows="2" data-setting="automation.searches.naukri" data-kind="lines" spellcheck="false"
+                    placeholder="https://www.naukri.com/...-jobs?k=..."></textarea>
+        </label>
+        <label class="field">
+          <span>Indeed</span>
+          <textarea rows="2" data-setting="automation.searches.indeed" data-kind="lines" spellcheck="false"
+                    placeholder="https://in.indeed.com/jobs?q=..."></textarea>
+        </label>
+        <label class="field">
+          <span>Glassdoor</span>
+          <textarea rows="3" data-setting="automation.searches.glassdoor" data-kind="lines" spellcheck="false"
+                    placeholder="https://www.glassdoor.co.in/Job/...htm"></textarea>
+        </label>
+      </fieldset>
+      <fieldset>
+        <legend>Options</legend>
+        <label class="check"><input type="checkbox" data-setting="automation.clearRepostListsBeforeStart"> Clear
+          repost lists before every start</label>
+        <label class="check"><input type="checkbox" data-setting="automation.startOnBrowserOpen"> Start
+          automatically when the browser opens (only if the backend is running)</label>
+        <label class="inline">Wait for me to solve a captcha (minutes)
+          <input type="number" min="1" max="120" data-setting="automation.captchaWaitMinutes"></label>
+      </fieldset>
+      <p class="hint">A site that shows a captcha pauses and you get a notification: solve it in the automation
+        window, then press Resume in that site's tab. Nobody there in time → the run moves on to the next search.
+        Don't minimize the automation window (covering it with other apps is fine).</p>
     </section>
 
     <section class="panel" id="tab-ai" hidden>

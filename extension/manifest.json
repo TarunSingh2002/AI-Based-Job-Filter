@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Job Filter v2",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Personal job filter: rules + local AI backend. Load unpacked only; never publish.",
   "minimum_chrome_version": "116",
-  "permissions": ["storage", "tabs", "scripting", "sidePanel", "notifications"],
+  "permissions": ["storage", "tabs", "scripting", "sidePanel", "notifications", "alarms"],
   "host_permissions": [
     "https://www.linkedin.com/*",
     "https://www.glassdoor.com/*",

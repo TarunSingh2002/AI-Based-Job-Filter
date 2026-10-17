@@ -14,6 +14,12 @@
 // wait 30 s, 60 s, 120 s and retry the same job; the run pauses only when the site still blocks after the third
 // wait. A captcha on the results page itself pauses at once. We never try to solve or get around a captcha.
 //
+// Two speeds (scrape_state.mode): "manual" = you pressed Start in the popup and watch the screen: lanes and gaps
+// as set. "automation" = the background's automation started the run (nobody watching): Indeed and Glassdoor read
+// ONE job page at a time with no extra gap; Naukri is the same in both modes (see jfsJdPace).
+// Long waits are ONE timer that Stop / Pause wake early (nap), not a chain of short polls: the browser slows the
+// timers of a window that is covered or minimized, and a chain of short timers then crawls.
+//
 // How a run survives "Next page" navigation:
 //   the run lives in chrome.storage.local "scrape_state". A content script cannot know its own tab id
 //   (the background stamps `tabId` from the sender on every save; the popup and the tab-closed cleanup use it),
@@ -31,7 +37,7 @@ const JFS_MAX_LANES = 4; // at most this many job pages are read at the same tim
 const JFS_BACKOFF_SECONDS = [30, 60, 120]; // waits after a blocked job page; still blocked after the last → pause
 // Polite random gaps [min, max] in ms. Short enough to be quick, random so the rhythm is not machine-like.
 const JFS_GAP_MS = {
-  jobPage: [300, 900], // before each job page, per lane
+  jobPage: [300, 900], // before each job page, per lane (not for automation runs on Indeed / Glassdoor: jfsJdPace)
   resultsPage: [1000, 2000], // before going to the next results page
   saveClick: [150, 400], // after clicking the site's save button
 };
@@ -120,6 +126,17 @@ function jfsPaint(el, kind) {
 function jfsJdLanes(siteSettings) {
   const wanted = siteSettings.jdParallel != null ? siteSettings.jdParallel : siteSettings.jdTabs;
   return Math.min(Math.max(parseInt(wanted, 10) || 1, 1), JFS_MAX_LANES);
+}
+
+/**
+ * How the JD stage reads job pages: {lanes, gapMs} (gapMs null = no gap).
+ * Automation on Indeed / Glassdoor: one page at a time, no gap. Nobody is watching to solve a check page, and one
+ * at a time trips far fewer rate limits; the page fetch + the AI call already take a few seconds per job.
+ * Everything else (a popup Start, and Naukri in both modes): the lanes from the settings + the polite gap.
+ */
+function jfsJdPace(mode, site, siteSettings) {
+  if (mode === 'automation' && (site === 'indeed' || site === 'glassdoor')) return { lanes: 1, gapMs: null };
+  return { lanes: jfsJdLanes(siteSettings), gapMs: JFS_GAP_MS.jobPage };
 }
 
 /** Clicks a site button (save / bookmark) and waits until isDone() confirms the new state. */
@@ -250,22 +267,26 @@ const JFScraper = {
   errorsInRow: 0,
   blockLevel: 0, // rate-limit waits in a row so far (index into JFS_BACKOFF_SECONDS)
   lastBlockAt: 0, // when the last blocked job page started a wait (see backOff)
+  sleepers: new Set(), // wake-up functions of the naps in progress (see nap)
 
   // ---------- wiring: every site file calls these three on page load ----------
 
-  /** Handles the popup's scrapeStart / scrapeStop / scrapeResume / scrapeStatus; replies with scrape_state. */
+  /**
+   * Handles scrapeStart {mode} / scrapeStop {reason} / scrapeResume {onlyIfRunning} / scrapeStatus from the popup
+   * and the background's automation; replies with scrape_state.
+   */
   listen(adapter) {
     this.adapter = adapter;
     const actions = {
-      scrapeStart: () => this.start(),
-      scrapeStop: () => this.stop(),
-      scrapeResume: () => this.resume(),
+      scrapeStart: (msg) => this.start(msg.mode),
+      scrapeStop: (msg) => this.stop(msg.reason),
+      scrapeResume: (msg) => this.resume(msg.onlyIfRunning === true),
       scrapeStatus: () => this.status(),
     };
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       const action = msg && actions[msg.type];
       if (!action) return false;
-      action().then(sendResponse, (e) => sendResponse({ error: String((e && e.message) || e) }));
+      action(msg).then(sendResponse, (e) => sendResponse({ error: String((e && e.message) || e) }));
       return true; // the reply is sent asynchronously
     });
     // Our run was stopped or paused from elsewhere (popup, background, another tab): stop here as well and
@@ -274,7 +295,7 @@ const JFScraper = {
       const next = area === 'local' && changes.scrape_state && changes.scrape_state.newValue;
       const stoppedElsewhere = next && (next.running === false || next.paused === true);
       if (stoppedElsewhere && this.isBusy() && next.startedAt === this.state.startedAt) {
-        this.runId += 1;
+        this.cancelLoops();
         this.state = next;
       }
     });
@@ -351,15 +372,17 @@ const JFScraper = {
     );
   },
 
-  // ---------- popup commands ----------
+  // ---------- popup / automation commands ----------
 
-  async start() {
+  /** mode "automation" = started by the background's automation (slower JD pace, see jfsJdPace); else "manual". */
+  async start(mode) {
     if (this.isBusy()) return this.state; // already running on this page
     const settings = await jfLoadSettings();
     const siteSettings = settings[this.adapter.site] || {};
     this.state = {
       running: true,
       site: this.adapter.site,
+      mode: mode === 'automation' ? 'automation' : 'manual', // kept through page hand-offs and Resume
       tabId: null, // content scripts can't see their tab id; the background stamps it from sender.tab.id
       pageKey: location.host,
       handoffAt: null, // set while the run moves to the next page (see the top of this file)
@@ -379,20 +402,27 @@ const JFScraper = {
     return this.state;
   },
 
-  async stop() {
+  /** reason: why it ended (the popup shows it); the automation passes its own, a popup Stop is "stopped by user". */
+  async stop(reason) {
     const state = this.isBusy() ? this.state : await this.loadState();
-    this.runId += 1; // the running loop (if any) exits at its next check
+    this.cancelLoops(); // the running loop (if any) exits at its next check
     if (!state) return null;
-    Object.assign(state, { running: false, paused: false, pauseReason: 'stopped by user', waitReason: null, waitUntil: null });
+    const pauseReason = reason || 'stopped by user';
+    Object.assign(state, { running: false, paused: false, pauseReason, waitReason: null, waitUntil: null });
     this.state = state;
     await this.save();
     return state;
   },
 
-  async resume() {
+  /**
+   * onlyIfRunning (the automation, after its tab loaded a page by itself): take over a run that is still going on
+   * but lost its page; never restart one that ended meanwhile or one that is paused (that waits for your Resume).
+   */
+  async resume(onlyIfRunning = false) {
     if (this.isBusy()) return this.state;
     const state = await this.loadState();
     if (!state || state.site !== this.adapter.site) return state; // nothing of this site to resume
+    if (onlyIfRunning && !(state.running && !state.paused)) return state;
     Object.assign(state, { running: true, paused: false, pauseReason: null, pageKey: location.host, handoffAt: null });
     this.state = state;
     await this.save();
@@ -545,11 +575,11 @@ const JFScraper = {
 
     // Several lanes, each reading one job at a time. JS runs one callback at a time, so shift() hands
     // every job to exactly one lane: no job is read twice.
-    const lanes = jfsJdLanes(settings[this.adapter.site] || {});
+    const pace = jfsJdPace(this.state.mode, this.adapter.site, settings[this.adapter.site] || {});
     const lane = async () => {
-      while (needJd.length && this.alive(token)) await this.screenJd(token, settings, needJd.shift());
+      while (needJd.length && this.alive(token)) await this.screenJd(token, settings, needJd.shift(), pace.gapMs);
     };
-    await Promise.all(Array.from({ length: Math.min(lanes, needJd.length) }, lane));
+    await Promise.all(Array.from({ length: Math.min(pace.lanes, needJd.length) }, lane));
   },
 
   /** A repost of a job judged before (same title + company, found by the backend): hide it. No JD, no save click. */
@@ -559,9 +589,9 @@ const JFScraper = {
     this.finishJob(item.job, 'duplicates');
   },
 
-  /** Step 3 — read the full JD and let the backend judge it. */
-  async screenJd(token, settings, item) {
-    const jd = await this.readJd(token, item);
+  /** Step 3 — read the full JD and let the backend judge it. gapMs: [min, max] wait before the job page, or null. */
+  async screenJd(token, settings, item, gapMs) {
+    const jd = await this.readJd(token, item, gapMs);
     if (jd === null) return; // stopped / paused meanwhile: the job stays unfinished and is retried after Resume
     if (!jd) {
       await this.skipJob(item, 'could not read the job description');
@@ -586,10 +616,10 @@ const JFScraper = {
    * adapter.fetchJd answers {jd, blocked}. A blocked job page is usually a short rate limit: back off, then
    * retry the SAME job (backOff decides how long, or pauses).
    */
-  async readJd(token, item) {
+  async readJd(token, item, gapMs) {
     for (;;) {
       if (!(await this.waitOutBackoff(token))) return null; // every lane holds back while the site rate-limits us
-      await jfsRandomSleep(...JFS_GAP_MS.jobPage); // polite gap between job pages; also staggers lanes after a wait
+      if (gapMs) await jfsRandomSleep(...gapMs); // polite gap between job pages; also staggers lanes after a wait
       if (!(await this.canContinue(token))) return null;
       if (this.state.waitUntil) continue; // another lane started a wait during our gap: wait as well
 
@@ -634,12 +664,12 @@ const JFScraper = {
     return this.waitOutBackoff(token);
   },
 
-  /** Waits while a rate-limit wait is on. Polls every 0.2 s, so Stop / Pause end even a 120 s wait at once. */
+  /** Waits while a rate-limit wait is on: one nap per lane, which Stop / Pause end at once (see nap). */
   async waitOutBackoff(token) {
     while (this.alive(token) && this.state.waitUntil) {
       const left = this.state.waitUntil - Date.now();
       if (left > 0) {
-        await jfsWaitFor(() => !this.alive(token), left, 200);
+        await this.nap(left);
       } else {
         Object.assign(this.state, { waitReason: null, waitUntil: null }); // over: the popup stops showing it
         await this.save();
@@ -726,6 +756,28 @@ const JFScraper = {
     return this.activeRunId !== 0 && this.activeRunId === this.runId;
   },
 
+  /** Makes every running loop exit at its next alive() check, and ends the naps they are in right now. */
+  cancelLoops() {
+    this.runId += 1;
+    for (const wake of [...this.sleepers]) wake();
+  },
+
+  /**
+   * Sleeps ms with ONE timer; cancelLoops() (Stop / Pause) wakes it at once. A covered or minimized browser
+   * window runs its timers late; one long timer is late once, a chain of 0.2 s polls would be late every time.
+   */
+  nap(ms) {
+    return new Promise((resolve) => {
+      const wake = () => {
+        clearTimeout(timer);
+        this.sleepers.delete(wake);
+        resolve();
+      };
+      const timer = setTimeout(wake, ms);
+      this.sleepers.add(wake);
+    });
+  },
+
   finishJob(job, countKey) {
     const counts = this.state.counts;
     this.done.add(job.job_id);
@@ -764,7 +816,7 @@ const JFScraper = {
   async pause(reason) {
     if (!this.state.running || this.state.paused) return; // with parallel lanes the first reason wins
     Object.assign(this.state, { paused: true, pauseReason: reason, waitReason: null, waitUntil: null });
-    this.runId += 1; // like stop(): lanes still waiting on a job page exit, and Resume works right away
+    this.cancelLoops(); // like stop(): lanes still waiting on a job page exit, and Resume works right away
     await this.save();
   },
 

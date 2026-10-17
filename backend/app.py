@@ -6,19 +6,25 @@ The HTTP server the Chrome extension talks to.
     POST /screen/jd      stage 2: one job, judged by its full description
     GET  /stats          today's CSV row counts per site
     POST /dedupe/clear   empty one repost list ("naukri" or "glassdoor_indeed")
+    POST /automation/started    the popup's "Start automation" began a run   -> automation-started.json
+    POST /automation/finished   that run ended (summary + one item per search) -> automation-finished.json
+    GET  /automation/last       the newest finished marker (the popup's "last run")
 
 Run from backend/:   uvicorn app:app --port 8765
 """
 
 import asyncio
 import logging
+import socket
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime
 from typing import Literal
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 
+import automation
 import decide
 from config import get_settings, load_profile
 from dedupe import dedupe_group, repost_key
@@ -27,9 +33,23 @@ from providers import get_provider
 from store import Store
 
 MIN_JD_CHARS = 200  # shorter than this is a failed scrape, not a job description
+PORT = 8765  # the port of the run command above (and of the extension's default backendUrl)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("job_filter")
+
+
+def backend_already_running() -> bool:
+    """Is something already listening on PORT (a backend started earlier)?
+
+    Uvicorn runs the startup below BEFORE it binds the port, so a second `uvicorn app:app` started by mistake gets
+    this far and only then fails with "address already in use". It must not touch the running backend's markers.
+    """
+    try:
+        socket.create_connection(("127.0.0.1", PORT), timeout=0.5).close()  # a listening port answers at once
+        return True
+    except OSError:  # refused or timed out (Windows lets a closed port time out): the port is free
+        return False
 
 
 @asynccontextmanager
@@ -45,6 +65,18 @@ async def lifespan(app: FastAPI):
     workbooks = asyncio.create_task(store.keep_workbooks_fresh())
     app.state.graph = build_graph(app.state.provider, app.state.profile, store)
     app.state.in_flight = {}  # (site, job_id, stage) -> the screening run in progress (see run_graph)
+    app.state.automation_folder = None  # day folder of the automation run in progress (automation_finished)
+    # A new backend = a new session: today's markers of an earlier run must not look like this session's
+    # (a Power Automate flow starts the backend, then the browser, then waits for automation-finished.json).
+    # Not when a backend already serves: then this copy is a second start by mistake and is about to exit.
+    if backend_already_running():
+        log.warning("a backend is already running on port %d: today's automation markers are left alone "
+                    "(this copy can't take that port)", PORT)
+    else:
+        try:
+            automation.set_aside(store.output_dir, datetime.now())
+        except OSError as e:  # a marker locked by another program must never stop the backend from starting
+            log.warning("could not set aside today's automation markers: %s: %s", type(e).__name__, e)
     log.info("provider=%s model=%s output=%s", app.state.provider.name, app.state.provider.model,
              settings.output_dir())
     yield
@@ -98,6 +130,23 @@ class JdRequest(BaseModel):
 
 class DedupeClearRequest(BaseModel):
     group: Literal["naukri", "glassdoor_indeed"]
+
+
+class AutomationItem(BaseModel):
+    """One saved search of the run, as the extension reports it. Everything is optional and extra keys
+    (e.g. counts) are kept: a picky check here would lose the "finished" signal Power Automate waits for."""
+    model_config = ConfigDict(extra="allow")
+
+    site: str = ""
+    url: str = ""
+    status: str = ""  # done | paused | stalled | error | skipped | ...
+    matched: int | None = None
+    reason: str | None = None
+
+
+class AutomationFinishedRequest(BaseModel):
+    summary: str = ""
+    items: list[AutomationItem] = []
 
 
 TITLE_RESULT_FIELDS = (
@@ -160,6 +209,32 @@ async def stats():
 async def dedupe_clear(req: DedupeClearRequest):
     """The popup's "Clear repost list": every (title, company) of that group may be screened once more."""
     return {"cleared": app.state.store.clear_repost_keys(req.group)}
+
+
+# The marker writes run in a worker thread: a rename Windows refuses for a moment is retried with short
+# sleeps (automation._retry), and those must not hold up the screening requests.
+
+@app.post("/automation/started")
+async def automation_started():
+    """The extension began an automation run (any request body is ignored)."""
+    path = await asyncio.to_thread(automation.mark_started, app.state.store.output_dir, datetime.now())
+    app.state.automation_folder = path.parent  # a run that ends after midnight also marks this day (2.2)
+    return {"ok": True, "path": str(path)}
+
+
+@app.post("/automation/finished")
+async def automation_finished(req: AutomationFinishedRequest):
+    """The run ended (finished, or stopped by the user): the signal Power Automate waits for."""
+    items = [item.model_dump() for item in req.items]
+    path = await asyncio.to_thread(automation.mark_finished, app.state.store.output_dir, datetime.now(),
+                                   req.summary, items, app.state.automation_folder)
+    app.state.automation_folder = None
+    return {"ok": True, "path": str(path)}
+
+
+@app.get("/automation/last")
+async def automation_last():
+    return automation.last_finished(app.state.store.output_dir)
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────────────────────

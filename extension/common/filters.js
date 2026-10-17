@@ -27,6 +27,27 @@ const JF_DEFAULT_SETTINGS = {
   glassdoor: { hideSaved: true, markProcessed: "all", maxPages: 10, jdParallel: 3 },
   naukri: { hideSaved: true, hidePromoted: true, markProcessed: "all", maxPages: 10, jdTabs: 2 },
   indeed: { hideSaved: true, markProcessed: "all", maxPages: 10, jdParallel: 3 },
+  // The automation (popup → Automation tab, DESIGN.md 3.7) runs these saved searches one after another:
+  // every Naukri link, then every Indeed link, then every Glassdoor link, each list in its own order.
+  automation: {
+    searches: {
+      naukri: [
+        "https://www.naukri.com/data-scientist-data-analysis-data-analytics-data-science-machine-learning-deep-learning-natural-language-processing-artificial-intelligence-tensorflow-scikit-learn-keras-pytorch-pandas-numpy-rnn-cnn-nltk-data-science-jobs?k=data%20scientist%2C%20data%20analysis%2C%20data%20analytics%2C%20data%20science%2C%20machine%20learning%2C%20deep%20learning%2C%20natural%20language%20processing%2C%20artificial%20intelligence%2C%20tensorflow%2C%20scikit-learn%2C%20keras%2C%20pytorch%2C%20pandas%2C%20numpy%2C%20rnn%2C%20cnn%2C%20nltk%2C%20data%20science&nignbevent_src=jobsearchDeskGNB&experience=1&jobAge=1",
+      ],
+      indeed: [
+        "https://in.indeed.com/jobs?q=Machine+Learning+OR+Data+Scientist%2C+Deep+Learning%2C+Generative+AI%2C+Data+Analysis%2C+Retrieval+Augmented+Generation%2C+Large+Language+Models%2C+Natural+Language+Processing%2C+Artificial+Intelligence%2C+TensorFlow%2C+Pandas%2C+NLP%2C+LLM%2C+RAG%2C+GenAI%2C+NumPy%2C+MLOps%2C+MLflow%2C+DVC%2C+LangChain&l=india&fromage=1&from=searchOnDesktopSerp&vjk=dc58df39893638bb",
+      ],
+      glassdoor: [
+        "https://www.glassdoor.co.in/Job/india-%22TensorFlow%22-OR-%22Pandas%22-OR-%22NLP%22-OR-%22LLM%22-OR-%22RAG%22-OR-%22GenAI%22-OR-%22NumPy%22-OR-%22LangChain%22-OR-%22Machine-Learning%22-OR-%22Python%22-jobs-SRCH_IL.0,5_IN115_KO6,128.htm?locId=115&locT=N&fromAge=1",
+        "https://www.glassdoor.co.in/Job/india-%22Natural-Language-Processing%22-OR-%22Large-Language-Models%22-OR-%22Retrieval-Augmented-Generation%22-OR-%22MLOps%22-OR-%22MLflow%22-OR-%22DVC%22-jobs-SRCH_IL.0,5_IN115_KO6,130.htm?locId=115&locT=N&fromAge=1",
+        "https://www.glassdoor.co.in/Job/india-%22Data-Scientist%22-OR-%22Deep-Learning%22-OR-%22Generative-AI%22-OR-%22Data-Analysis%22-OR-%22Artificial-Intelligence%22-OR-%22Data-Science%22-jobs-SRCH_IL.0,5_IN115_KO6,126.htm?locId=115&locT=N&fromAge=1",
+      ],
+    },
+    clearRepostListsBeforeStart: false,
+    startOnBrowserOpen: false,    // only starts once the internet is up AND the backend answers
+    captchaWaitMinutes: 10,       // a paused site waits this long for you (captcha), then the run moves on
+    stallMinutes: 15,             // a site run that shows no progress for this long is given up
+  },
 };
 
 // Read settings from storage and fill anything missing with defaults.
@@ -52,7 +73,9 @@ function jfMergeInto(base, extra) {
   for (const key of Object.keys(extra)) {
     const value = extra[key];
     if (jfIsPlainObject(base[key])) jfMergeInto(base[key], value);  // a section: merge field by field (ignores junk)
-    else if (value !== undefined && value !== null) base[key] = value; // a value or a list: stored one wins
+    else if (Array.isArray(base[key]) && !Array.isArray(value)) continue; // a list stays a list (ignores junk)
+    else if (value !== undefined && value !== null) base[key] = value; // a value or a list: the stored one wins
+    // (a stored list REPLACES the default list, never mixes with it: an emptied search list stays empty)
   }
   return base;
 }

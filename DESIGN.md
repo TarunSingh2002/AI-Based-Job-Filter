@@ -9,6 +9,7 @@ AI-Based-Job-Filter/       ← repo root (v2; the old v1 code is git tag v1-old-
   README.md                ← how to run (user-facing)
   backend/                 ← Python: FastAPI + LangGraph + Jev (the only AI provider)
     output/                ← results: output/YYYY-MM-DD/jobs.xlsx (open this) + <site>_matches.csv, <site>_rejected.csv
+                             (+ automation-started.json / automation-finished.json, the run markers, 2.2)
   extension/               ← Chrome MV3 extension (load unpacked; NEVER publish to the Web Store)
 ```
 `backend/.gitignore` keeps `.env` (the Jev key), `.venv/`, `data/` (verdict cache), `output/` and caches out of git.
@@ -54,6 +55,7 @@ backend/
   dedupe.py           repost key (normalized title|company) + site groups (section 2.2); company_name() also used by clean_jd
   store.py            SQLite cache + repost lists (data/jobs.db) + CSV writer (output/<date>/...) + keeps jobs.xlsx up to date
   excel.py            jobs.xlsx builder (openpyxl): the day's CSVs as sortable Excel tables (section 2.7)
+  automation.py       marker files of the "Start automation" run: automation-started/-finished.json (section 2.2)
   providers/
     __init__.py       get_provider(): always Jev
     base.py           Provider protocol + Answer dataclass
@@ -136,6 +138,50 @@ old 1–10 skills score.)
 
 `POST /dedupe/clear` `{"group": "naukri" | "glassdoor_indeed"}` → `{"cleared": n}` — empties that repost list
 (any other group → 422). The popup's "Clear repost list" button.
+
+**Automation markers** (`automation.py`) — the extension's hands-off run (popup "Start automation") tells the backend
+when it begins and ends; the backend leaves a file for each, so Windows Power Automate can wait for the end and then
+close the browser and the backend. `<today>` = local date `YYYY-MM-DD`, times = local ISO (`"2026-10-16T14:05:09"`).
+
+`POST /automation/started` (body `{}`; any body is ignored) → `{"ok": true, "path": "<file>"}` — renames today's
+`automation-finished.json` (an earlier run) to `automation-finished.before-HHMMSS.json`, then writes
+`OUTPUT_DIR/<today>/automation-started.json` = `{"started_at": "<time>"}`.
+
+`POST /automation/finished` → `{"ok": true, "path": "<file>"}`
+```json
+{ "summary": "Naukri: 12 matches · Indeed: paused (captcha) · ...",
+  "items": [ { "site": "naukri", "url": "...", "status": "done", "matched": 12, "reason": "..." } ] }
+```
+writes `OUTPUT_DIR/<today>/automation-finished.json` = `{"finished_at": "<time>", "summary", "items"}`. Sent when a run
+ends, also when the user stops it (summary "stopped by user"). Every field is optional (default `""` / `[]` / null) and
+extra item keys (e.g. counts) are kept: a strict check would lose the signal. Only a `matched` that is not a number
+or null → 422.
+
+`GET /automation/last` → the newest finished marker's content (set-aside `.before-HHMMSS` ones included: day folders
+newest first, then the largest `finished_at`; an unreadable file is skipped), or `{"finished_at": null}`. For a quick
+look in the browser or a script (README); the popup's "Last run" line comes from `auto_state` (3.7), so it works
+without the backend.
+
+Marker rules (what makes "the file is there" a reliable signal):
+- Atomic: the JSON goes to `<name>.<random>.tmp` in the same folder, then `os.replace` onto the name. A reader never
+  sees half a file, and a wait for `automation-finished.json` can't match the temp name. Windows refuses the rename
+  while another program has the file open (a reader, antivirus, OneDrive): retried every 0.1 s for ~2 s; a failed
+  write removes its temp file. Marker I/O runs in a worker thread (`asyncio.to_thread`).
+- Day folder created when missing. `automation-started.json` without `automation-finished.json` = a run in progress.
+- `automation-finished.json` always belongs to the LATEST run: today's older one is set aside when a run starts, and
+  at backend startup (before it serves) today's `automation-started.json` AND `automation-finished.json` are both set
+  aside (`.before-HHMMSS`, `-2`, `-3` if taken) — a flow that starts the backend, then the browser, then waits for the
+  file must never find a run from earlier that day. A set-aside that fails at startup only logs a warning.
+  Exception: something already listens on 127.0.0.1:8765 (a TCP connect, 0.5 s timeout) → no set-aside, a warning.
+  Uvicorn runs the startup BEFORE it binds the port, so a second `uvicorn app:app` started by mistake gets that far and
+  then exits with "address already in use"; it must not move the running backend's markers (a run in progress would
+  look like no run).
+- A run that starts before midnight and ends after it: the backend remembers (in memory) the day folder of the last
+  `/automation/started` and writes the finished marker into that folder too, so a flow waiting in the start day's
+  folder sees it. Lost on a backend restart (then only today's folder gets it).
+- README "Power Automate" has the flow: `/health` already answers → stop the flow (the user started a backend; leave
+  everything alone) → else start backend (keep its PID) → wait for `/health` → start Opera → wait for
+  `automation-started.json` (timeout) → wait for `automation-finished.json` → close Opera + that backend.
 
 ### 2.3 LangGraph (`graph.py`)
 
@@ -334,7 +380,8 @@ mismatched header. jobs.xlsx and /stats still read the renamed files.
 ```
 extension/
   manifest.json
-  background.js            service worker (section 3.3)
+  background.js            service worker (section 3.3); importScripts("common/filters.js", "automation.js")
+  automation.js            the "Start automation" run, part of the service worker (section 3.7)
   common/filters.js        pure rule functions + settings defaults (no DOM writes, no clicks, no network)
   sites/linkedin.js        PASSIVE ONLY (section 3.4)
   sites/scraper-core.js    shared scraper engine for glassdoor/naukri/indeed (section 3.5)
@@ -348,8 +395,11 @@ extension/
 ```
 
 ### 3.1 manifest.json (exact)
-- `"manifest_version": 3`, name "Job Filter v2", version "2.1.0"
-- `"permissions": ["storage", "tabs", "scripting", "sidePanel", "notifications"]` (notifications: scraper pause / finish, 3.5)
+- `"manifest_version": 3`, name "Job Filter v2", version "2.2.0"
+- `"permissions": ["storage", "tabs", "scripting", "sidePanel", "notifications", "alarms"]` (notifications: scraper
+  pause / finish, 3.5, and the automation, 3.7; alarms: the automation's watchdog, 3.7). A Chromium browser without
+  extension side panels (Opera, 3.8) treats `sidePanel` / `side_panel` as unknown: a warning on its extensions page,
+  the extension still loads, and the popup hides the side-panel button (3.6).
 - `"host_permissions": ["https://www.linkedin.com/*", "https://www.glassdoor.com/*", "https://www.glassdoor.co.in/*", "https://www.naukri.com/*", "https://in.indeed.com/*", "https://www.indeed.com/*", "http://localhost:8765/*", "http://127.0.0.1:8765/*"]`
 - `"background": {"service_worker": "background.js"}` (classic, not module)
 - `"action": {"default_popup": "popup/popup.html"}`, `"side_panel": {"default_path": "sidepanel/sidepanel.html"}`
@@ -381,21 +431,36 @@ extension/
                hideApplied: true, hideDismissed: true, titleAI: true, jdAI: true },
   glassdoor: { hideSaved: true, markProcessed: "all", maxPages: 10, jdParallel: 3 },   // markProcessed: "all" | "rejected" | "none"
   naukri:    { hideSaved: true, hidePromoted: true, markProcessed: "all", maxPages: 10, jdTabs: 2 },
-  indeed:    { hideSaved: true, markProcessed: "all", maxPages: 10, jdParallel: 3 }
+  indeed:    { hideSaved: true, markProcessed: "all", maxPages: 10, jdParallel: 3 },
+  automation: {                           // the "Start automation" run (3.7)
+    searches: { naukri: [<url>], indeed: [<url>], glassdoor: [<url>, <url>, <url>] },  // the user's saved searches
+    clearRepostListsBeforeStart: false,   // POST /dedupe/clear for both repost lists before each run
+    startOnBrowserOpen: false,            // start on chrome.runtime.onStartup, only with internet + backend /health
+    captchaWaitMinutes: 10,               // a paused search waits this long for the user, then the run moves on
+    stallMinutes: 15                      // a search whose scrape_state doesn't change this long is given up (no popup field)
+  }
 }
 ```
 `jdParallel` (Glassdoor / Indeed) and `jdTabs` (Naukri, one worker tab each) = how many job pages are read at the same
-time ("lanes", 3.5); the engine clamps them to 1–4.
+time ("lanes", 3.5); the engine clamps them to 1–4 (an automation run reads Indeed / Glassdoor with one lane, 3.5).
+The default `searches` are the user's links (`common/filters.js`): 1 Naukri, 1 Indeed, 3 Glassdoor.
+Merge rule (`jfMergeSettings`): sections merge key by key; a stored LIST replaces the default list (never mixed, so an
+emptied search list stays empty); a stored non-list where the default is a list is ignored (junk).
 Other storage keys (chrome.storage.local):
 - `"li_partial"`: `{ items: ["<normTitle>|<company lower>", ...] }` — LinkedIn partial-hide list (no auto-expiry; user keeps/clears)
 - `"li_verdicts"`: `{ "<jobId>": {decision, stage, reason, confidence, match_score, t} }` — cap 3000 newest
 - `"li_current"`: `{ jobId, title, company, status: "reading"|"scoring"|"done"|"error", verdict?, t }` — side panel renders this
-- `"scrape_state"`: `{ running, site, tabId, page, pagesDone, maxPages, startedAt, counts: {seen, ruleHidden, titleRejected, jdRejected, matched, duplicates, errors}, paused, pauseReason, waitReason, waitUntil, pageKey, handoffAt }`
-  (`tabId` is stamped by background from the message sender — content scripts can't know it; `handoffAt` = time of the last
+- `"scrape_state"`: `{ running, site, mode, tabId, page, pagesDone, maxPages, startedAt, counts: {seen, ruleHidden, titleRejected, jdRejected, matched, duplicates, errors}, paused, pauseReason, waitReason, waitUntil, pageKey, handoffAt }`
+  (`mode` = `"manual"` (popup Start) | `"automation"` (started by 3.7), set by scrapeStart and kept through page
+  hand-offs and Resume; a state from v2.1 without it counts as manual. `tabId` is stamped by background from the message sender — content scripts can't know it; `handoffAt` = time of the last
   "Next page" navigation: the next page's script takes the run over only while it is < 60 s old; `duplicates` = reposts
   hidden; `waitReason` = e.g. `"waiting 60s (site rate limit)"` and `waitUntil` = its end (ms) while all lanes back off,
-  else null — cleared by pause / stop / end / Resume)
-chrome.storage.session: `"li_partial_prompted"` (true after the keep/clear prompt was shown this browser session).
+  else null — cleared by pause / stop / end / Resume; `pauseReason` after a stop = the scrapeStop reason, default
+  `"stopped by user"`)
+- `"auto_state"`: the automation run (3.7).
+chrome.storage.session: `"li_partial_prompted"` (true after the keep/clear prompt was shown this browser session);
+`"auto_session"` (id of this browser session, 3.7); `"auto_boot"` (`{since}` while start-on-browser-open waits, 3.7);
+`"auto_starting"` (time autoStart began, while it checks the backend; the popup shows "Starting…" from it, 3.6 / 3.7).
 **Never** use the page's `localStorage` / `sessionStorage` / cookies / `document.cookie` from any content script.
 
 `common/filters.js` exports (as globals, since content scripts share scope): `JF_DEFAULT_SETTINGS`, `jfLoadSettings(): Promise<settings>` (deep-merged with defaults),
@@ -416,7 +481,12 @@ chrome.storage.session: `"li_partial_prompted"` (true after the keep/clear promp
 | `health` | popup/sidepanel | `{}` | backend `/health` or `{error}` |
 | `stats` | sidepanel | `{}` | backend `/stats` or `{error}` |
 | `dedupeClear` | popup | `{group: "naukri" \| "glassdoor_indeed"}` | backend `POST /dedupe/clear` → `{cleared}`, or `{error}` (other groups refused without a request; works with AI off) |
-Popup → content (chrome.tabs.sendMessage): `{type:"scrapeStart"}`, `{type:"scrapeStop"}`, `{type:"scrapeResume"}`, `{type:"scrapeStatus"}`. LinkedIn content script registers NO onMessage listener.
+| `autoStart` | popup | `{}` | `{ok}` once the run's window is open, or `{error}` ("the automation is already running", "<Site> is being scraped right now: stop it first", "no valid search links saved …", "backend not reachable — start it first" after asking /health for 2 min, "no internet connection", "cancelled" = Stop automation pressed meanwhile) (3.7) |
+| `autoStop` | popup | `{}` | `{ok}` (also when nothing runs) (3.7) |
+Popup / automation → content (chrome.tabs.sendMessage): `{type:"scrapeStart", mode:"manual"|"automation"}` (missing =
+manual), `{type:"scrapeStop", reason?}`, `{type:"scrapeResume", onlyIfRunning?}` (`onlyIfRunning: true` = the
+automation re-attaching a run whose page reloaded, 3.7: never restarts a run that ended or is paused),
+`{type:"scrapeStatus"}`; each replies with the scrape_state. LinkedIn content script registers NO onMessage listener.
 
 Background never forwards page data anywhere except the backend URL in settings.
 
@@ -485,6 +555,11 @@ rules → hide; collect remaining → `screenTitle` in batches of ≤20 →
   default 2), clamped 1–4. The lanes share one queue (`shift()`, so no job is read twice); each lane reads one job at a
   time: polite random gap **300–900 ms** → `fetchJd` → `screenJd` → hide card, highlight, markProcessed(if "all", or
   "rejected" and rejected; then **150–400 ms** gap) → counts → `scrapeProgress`.
+- **Pace by mode** (`jfsJdPace(mode, site, siteSettings)`, `scrape_state.mode`): `"manual"` (popup Start: the user sits
+  at the screen and solves captchas, so it must be fast) = exactly the above. `"automation"` (3.7: nobody watching) on
+  **Indeed and Glassdoor** = ONE lane whatever `jdParallel` says, and NO gap before a job page (0 ms: the page fetch +
+  the AI call already take a few seconds; a slower pace would make the run last hours). Naukri is the same in both
+  modes (its `jdTabs` lanes + gaps). The save-click gap, the results-page gap and the back-off below apply in both modes.
 After the page: random delay **1–2 s** → `nextPage()`; stop at `maxPages`, "none", user stop, or `detectBlock()` → `paused`
 with reason (user solves captcha/login themselves, then presses Resume). Never try to solve or bypass a captcha/challenge.
 On page load each site file calls `JFScraper.resumeIfRunning(adapter)` which continues when `scrape_state.running && site matches && tabId matches`.
@@ -495,7 +570,9 @@ their gap) before its next job page; the blocked lane then retries the SAME job.
 after the third wait → pause with `"Still blocked after waiting 30, 60, 120 seconds. <adapter message>"`. A job page that
 answers normally resets the level to 30 s. "New" = the request started after the last block was handled: blocks and
 successes of requests that were already under way then belong to that burst (they join the wait; they don't escalate or
-reset). Waits poll every 0.2 s, so Stop / Pause end even a 120 s wait at once. A blocked job is never finished, hidden
+reset). A wait is ONE timer per lane (`nap`) that Stop / Pause wake at once (`cancelLoops`), not a chain of 0.2 s polls:
+a browser runs the timers of a covered or minimized window late (README "Run while you work"), and one long timer is
+late once where a polling chain would crawl. A blocked job is never finished, hidden
 or counted as an error; after a pause, Resume starts the waits from 30 s again and retries it. A captcha / login wall on
 the RESULTS page still pauses at once (`detectBlock`). Errors: 3 errors in a row (title / JD AI errors, unreadable JD;
 counted across all lanes in completion order) → pause; the first pause reason wins and the other lanes stop.
@@ -503,8 +580,9 @@ counted across all lanes in completion order) → pause; the first pause reason 
 Notifications (background, `chrome.notifications`, one id `"jf-scrape"` so a new one replaces the last): when
 `scrape_state` of glassdoor / naukri / indeed becomes `paused` → "Job Filter: <Site> paused" + the reason; when `running`
 goes true → false for any reason except "stopped by user" → "Job Filter: <Site> finished" + `"<reason> · N pages. X
-matched, Y rejected by AI, Z reposts hidden, R hidden by rules[, E errors]."`. Never for LinkedIn. Clicking it focuses
-the scraping tab. The toolbar badge of the scraping tab shows a red `!` while paused.
+matched, Y rejected by AI, Z reposts hidden, R hidden by rules[, E errors]."`. Never for LinkedIn, and never for a run
+with `mode: "automation"` (the automation sends its own, 3.7). Clicking it focuses the scraping tab. The toolbar badge
+of the scraping tab shows a red `!` while paused.
 
 Site specifics (verified live 2026-10-14 unless noted):
 - **Naukri list** (`www.naukri.com/<keyword>-jobs[-N]`): card `.srp-jobtuple-wrapper[data-job-id]`; title `a.title` (attr `title`, href = job page);
@@ -537,15 +615,126 @@ Site specifics (verified live 2026-10-14 unless noted):
 - Highlights on scraper sites (fine there): active = yellow outline, pass = green, reject = red then hidden after 600 ms, skip = grey.
 
 ### 3.6 Popup
-Tabs: **Filters** (global blacklist/whitelist/companies textareas, comma separated), **LinkedIn**, **Glassdoor**, **Naukri**, **Indeed**, **AI**.
+Tabs: **Filters** (global blacklist/whitelist/companies textareas, comma separated), **LinkedIn**, **Glassdoor**, **Naukri**, **Indeed**, **Automation**, **AI**.
 - Each site tab: its toggles from settings. Glassdoor/Naukri/Indeed tabs: Start / Stop / Resume buttons + live counts from `scrape_state`
   (seen, rules hid, title rejected, JD rejected, matched, reposts (= `duplicates`), errors; Start only enabled when the
   active tab is that site's search page); status line "Running · waiting 60s (site rate limit), retry at <time> · …"
   during a back-off; "Job pages read at once" (`jdParallel`, 1–4) on Glassdoor / Indeed ("Job pages open at once" =
   `jdTabs` on Naukri); a **Reposts** box with "Clear repost list" → `dedupeClear` (Naukri: `naukri`; Glassdoor and
-  Indeed: the shared `glassdoor_indeed`), result in the footer. LinkedIn tab: NO scrape button at all; "Open side panel" button
-  (`chrome.sidePanel.open({tabId})` from the click handler), partial list count + Clear.
+  Indeed: the shared `glassdoor_indeed`), result in the footer. Start sends `{type:"scrapeStart", mode:"manual"}`. While
+  the automation runs, every site's Start is disabled with the note "The automation is running (Automation tab), so
+  Start is off until it ends." (Stop / Resume stay: Resume is how a paused automation search goes on). LinkedIn tab: NO scrape button at all; "Open side panel" button
+  (`chrome.sidePanel.open({tabId})` from the click handler; disabled with a note when `chrome.sidePanel` is missing, e.g.
+  Opera: the verdict still shows on the toolbar badge), partial list count + Clear.
+- Automation tab (3.7): hint "Runs in its own window. You can keep working in other apps; see README 'Run while you
+  work' …"; status line ("Running · search 3 of 6 · Indeed 2/2: needs you", "Starting… checking the backend (up to 2
+  minutes)" — also in a popup opened again during that check, from storage.session `auto_starting` (ignored when
+  older than 3 minutes: left by a stopped service worker), with Stop on; "Idle"); live list from `auto_state` (one row per search: label, status word, "N matched", short link, reason);
+  "Last run: <time> — <summary>" + the run's notes; **Start automation** / **Stop automation** (Start is off while it
+  runs or a scrape runs; with unsaved form changes the first press only warns, a second press starts with the SAVED
+  settings; any new edit or a Save makes the next press warn again); three textareas `data-kind="lines"` (one link per line; links contain commas) for Naukri / Indeed /
+  Glassdoor; checkboxes "Clear repost lists before every start" and "Start automatically when the browser opens (only if
+  the backend is running)"; number "Wait for me to solve a captcha (minutes)" (1–120). Saved with the footer's Save.
 - AI tab: backend URL, AI on/off, backend health + provider/model (via `health` message), a note that the wanted roles
   (`target_role_families`), skills and years of experience are set in `backend/profile.yaml`, and the text
   "Results (jobs.xlsx + CSV files) are in AI-Based-Job-Filter/backend/output/<today>/".
 - Save writes `settings`; content scripts react via `chrome.storage.onChanged`.
+
+### 3.7 Automation — `automation.js` (part of the service worker)
+"Start automation" runs every saved search one after another, unattended, while the user works in other apps: all
+`automation.searches.naukri` links, then `indeed`, then `glassdoor` (fixed site order; each list in its order), in ONE
+new normal, focused window, each with that site's normal scraper started in mode `"automation"` (3.5) and the saved site
+settings. LinkedIn is never part of it. It never solves a captcha.
+
+`chrome.storage.local "auto_state"`:
+```js
+{ running, startedAt, finishedAt, sessionId, windowId, tabId, index, lastProgressAt, notes: [str], summary,
+  marker: null | "pending" | "sent" | "failed: <error>",          // the backend's automation-finished.json (2.2)
+  items: [ { site, label: "Glassdoor 2/3", url,
+             status: "pending"|"starting"|"running"|"waiting_for_you"|"done"|"paused"|"stalled"|"error"|"skipped",
+             counts /* scrape_state.counts of its run */, reason, startedAt, endedAt,
+             runStartedAt /* scrape_state.startedAt of its run */, waitingSince, startAttempts } ] }
+```
+The service worker can stop at any moment (MV3), so everything needed to go on is in storage; memory only knows "this
+worker is starting search N right now" (`startingKey`). Listeners are registered at the top level of the file.
+`driveAutomation()` reads `auto_state` + `scrape_state` and takes the next step; it runs on every `scrape_state`
+change, when a tab / window closes, and every minute from the `chrome.alarms` alarm `"auto-watchdog"` (created at start,
+cleared at the end; an alarm also wakes a stopped worker). All changes of `auto_state` go through one promise queue
+(`autoLocked`), and at most one drive waits in it, so two events close together can never both end a search or both
+start the next one. Running the drive twice in a row changes nothing the second time.
+
+**autoStart** (popup `{type:"autoStart"}`; or start-on-browser-open below): refuse if running / starting, or if a
+scrape runs in a tab that still exists (a run whose tab is gone is marked stopped); build the items (blank lines
+skipped; a link that is not `https:` on its site's host → item `error` "this link is not on <Site>", the run goes on;
+no valid link → refuse); need `navigator.onLine` + backend `/health` `ok` — the button asks now and every 15 s for 2
+minutes ("backend not reachable — start it first" / "no internet connection"); `clearRepostListsBeforeStart` →
+`POST /dedupe/clear` for `naukri` and `glassdoor_indeed` (results go to `notes`, never stop the run); the last run's
+`marker:"pending"`, if any, is sent now or set to `"failed: a new run started first"` (sent later it would land after
+this run's "started"); `POST /automation/started`; open the window (`about:blank`); save `auto_state`; create the
+alarm; drive. From its first step until it replies, `storage.session "auto_starting"` holds its start time (the popup's
+"Starting…"). Stop pressed during these steps (each await can take seconds; the /health wait notices it at its next
+15 s check) is looked for after every one: nothing more is cleared, a window already opened is closed again, an
+already-posted "started" gets `POST /automation/finished` "stopped by user", and the reply is `{error:"cancelled"}`
+(the popup: "Start cancelled"). The last look and the save of `auto_state` are one
+`autoLocked` step, so a Stop after it finds the run and stops it normally.
+
+**One search** (`startItem`, at most 3 attempts when a worker restart cuts one short): make sure no scrape runs
+(scrapeStop, then mark it stopped if it didn't confirm within 10 s); navigate the run tab; wait for `complete` after a
+fresh `loading` (≤ 60 s, then try anyway); wait 5 s; send `{type:"scrapeStart", mode:"automation"}` every 3 s for up to
+60 s until the page answers with a running automation run → `running` (+ `runStartedAt`), else `error` "the page did
+not start scraping: …". Stop / a newer attempt / the window closing make a start give up at its next step (a scraper
+it already started is stopped). After a worker restart, a `starting` search whose scraper already runs (same tab and
+site, started after the search) is adopted instead of started twice.
+
+**Following it** (the scrape_state is "its run": same tab, same site, `startedAt === runStartedAt`):
+- `running` → keep waiting (back-off waits included); `counts` copied; each change moves `lastProgressAt`.
+  Naukri's "Next page" in the same tab is a hand-off, not an end; a hand-off no page took over for 2 minutes →
+  `stalled` "the next results page never took over".
+- the run tab loads a page by itself while the search is `running` (no `handoffAt`: the site reloads / redirects, e.g.
+  a "Just a moment…" check that clears on its own a few seconds after Start, or the user clicks in that window): the
+  old page's scraper died with its page and no page takes a run over without a hand-off, so `onRunTabLoaded`
+  (`tabs.onUpdated` `complete`, not during `startItem`'s own load) waits 5 s and, if the run is still going on and
+  not paused, sends `{type:"scrapeResume", onlyIfRunning:true}`: the new page takes the same run over (same
+  `startedAt`, so the search keeps following it; its cards are read again, cached verdicts make that quick). A page
+  that already runs it just answers; a paused run still waits for the user's Resume.
+- ended (`running:false`) → `done` with its `pauseReason` (`"stopped by user"` = its Stop in the popup → `skipped`).
+- `paused` (captcha, login wall, still blocked after the back-off, 3 errors in a row) → `waiting_for_you` + ONE
+  notification "<Site> needs you" / "Solve the captcha in the Job Filter window, then press Resume (extension icon →
+  <Site>). Without you it moves on in N min." (other reasons: "The run paused (<reason>). Fix it …"); clicking it
+  focuses the run window. Resumed (running again) → back to `running`. Still paused after `captchaWaitMinutes` →
+  `paused` with the reason, scrapeStop `"the automation moved on (nobody solved it in time)"`, next search.
+- no `scrape_state` change for `stallMinutes` while `running` → `stalled`, scrapeStop, next search.
+- the run tab / window closed → that search `error` "the automation window was closed", the rest `skipped`, the run ends.
+Each search's end is written exactly once (the queue + `index` moving on); the next search starts only after that.
+
+**End**: `running:false`, `finishedAt`, `summary` = one part per search, e.g. `"Naukri: 12 matches · Indeed: paused
+(captcha) · Glassdoor 1/3: 4 matches · Glassdoor 2/3: stalled (no progress for 15 minutes), 1 match · …"` (prefixed
+`"stopped: <why> · "` when the window was closed); ONE notification "Automation finished" + the summary;
+`POST /automation/finished {summary, items: [{site, url, status, matched, reason}]}`; the window stays open.
+`marker:"pending"` is saved together with `running:false`; until the backend took the marker the alarm stays and every
+drive sends it again (10 tries, a minute apart), so a worker stop right at the end can't lose it.
+**autoStop** (popup): scrapeStop the current search (`skipped`, reason "stopped by user"), the rest `skipped`,
+`summary` "stopped by user", no notification, still `POST /automation/finished` (same marker rule).
+**Browser closed (or extension reloaded) mid-run**: `sessionId` (kept in `chrome.storage.session "auto_session"`, which
+the browser empties on restart, as does an extension reload / update) no longer matches → the run is closed quietly
+(current search `error` "the browser or the extension restarted during the run", rest `skipped`), with NO notification
+and NO finished marker (a Power Automate flow that just opened the browser for a new run must not see one). The next
+drive does it: `chrome.runtime.onStartup` (browser) and `chrome.runtime.onInstalled` (reload / update: the alarm is gone
+too, and the search page's script can no longer reach us) both drive at once. On both events background.js also marks
+a `running` scrape_state stopped ("browser restarted" / "extension reloaded"), or the popup's Start buttons and "Start
+automation" would stay off.
+
+**Start when the browser opens** (`startOnBrowserOpen`, `chrome.runtime.onStartup` only): if no run started in the
+last 6 hours, wait for `navigator.onLine` AND backend `/health` — checked every 20 s for up to 10 minutes
+(`storage.session "auto_boot" = {since}` + the alarm carry the wait across worker restarts) — then autoStart. Never up →
+ONE notification "Automation not started" / "backend not running / no internet", nothing else. Someone who opens the
+browser without the backend therefore starts nothing.
+
+### 3.8 Opera and "run while you work"
+The user runs the extension in **Opera** (Chromium; loaded unpacked on `opera://extensions`) and keeps doing LinkedIn by
+hand. Every optional API is feature-checked: `chrome.sidePanel` (missing in Opera → the popup button is disabled with a
+note, 3.6), `chrome.notifications`, `chrome.alarms`. Chromium browsers run timers late in a window that is covered by
+other apps (Windows reports it as hidden) or minimized; the README section "Run while you work" starts Opera with
+`--disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-renderer-backgrounding` (the same
+for Power Automate's "Run application") and says: don't minimize the automation window, covering it is fine. The engine
+itself uses one timer for long waits (3.5), so even without the flags a covered window slows down instead of stalling.

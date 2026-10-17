@@ -1,9 +1,17 @@
 // Job Filter v2 — popup.
 // Edits chrome.storage.local "settings" (content scripts pick changes up via chrome.storage.onChanged),
-// starts / stops / resumes the Glassdoor, Naukri and Indeed scrapers, clears the backend's repost lists,
-// and checks the backend. Uses jfLoadSettings / jfMergeSettings from ../common/filters.js.
+// starts / stops / resumes the Glassdoor, Naukri and Indeed scrapers, starts / stops the automation (it runs in
+// the background: automation.js) and shows its progress from storage "auto_state", clears the backend's repost
+// lists, and checks the backend. Uses jfLoadSettings / jfMergeSettings from ../common/filters.js.
 
 const SITE_LABEL = { glassdoor: "Glassdoor", naukri: "Naukri", indeed: "Indeed", linkedin: "LinkedIn" };
+const AUTO_STATUS_TEXT = {
+  pending: "queued", starting: "opening…", running: "running", waiting_for_you: "needs you",
+  done: "done", paused: "paused", stalled: "stalled", error: "error", skipped: "skipped",
+};
+// automation.js keeps "Start is checking the backend" in storage.session "auto_starting" (its start time), so a
+// popup opened again meanwhile still shows "Starting…" and offers Stop. Older = left by a stopped service worker.
+const AUTO_STARTING_MAX_MS = 3 * 60000;
 
 // Start is only offered on a search-results page: that is the only page the scraper knows how to read.
 const SEARCH_PAGE_TESTS = {
@@ -16,6 +24,10 @@ const SEARCH_PAGE_TESTS = {
 let settings = null; // settings as last loaded or saved
 let activeTab = null; // tab the popup was opened over (looked up early: sidePanel.open must run synchronously)
 let scrapeState = null; // copy of storage "scrape_state"
+let autoState = null; // copy of storage "auto_state" (the automation run)
+let autoStartPending = false; // "Start automation" pressed (here or in an earlier popup); the backend is being checked
+let autoStartWarned = false; // "unsaved changes" was shown once; a second press starts with the saved settings
+let autoMessage = ""; // why the last Start / Stop automation failed
 let dirty = false; // the form has edits that are not saved yet
 
 init().catch((err) => showStatus("Popup failed to load: " + errorText(err), true));
@@ -27,11 +39,15 @@ async function init() {
   fillForm(settings);
   wireEvents();
 
-  const data = await chrome.storage.local.get(["scrape_state", "li_partial"]);
+  const data = await chrome.storage.local.get(["scrape_state", "li_partial", "auto_state"]);
   scrapeState = data.scrape_state || null;
+  autoState = data.auto_state || null;
+  autoStartPending = await readAutoStarting();
   renderScrape();
+  renderAuto();
   renderPartialCount(data.li_partial);
   updateLinkedInUi();
+  updateSidePanelUi();
   $("csvHint").textContent = "Results (jobs.xlsx + CSV files) are in AI-Based-Job-Filter/backend/output/" + localDate() + "/";
   showTab(tabForUrl(activeTab && activeTab.url));
   chrome.storage.onChanged.addListener(onStorageChanged);
@@ -57,6 +73,8 @@ function wireEvents() {
   $("save").addEventListener("click", safely(saveSettings));
   $("clearPartial").addEventListener("click", safely(clearPartialList));
   $("checkHealth").addEventListener("click", safely(checkHealth));
+  $("autoStart").addEventListener("click", safely(startAutomation));
+  $("autoStop").addEventListener("click", safely(stopAutomation));
   $("openSidePanel").addEventListener("click", openSidePanel); // not wrapped: must stay synchronous (see below)
 }
 
@@ -66,10 +84,20 @@ function safely(handler) {
 }
 
 function onStorageChanged(changes, area) {
+  if (area === "session" && changes.auto_starting) {
+    autoStartPending = isFreshStart(changes.auto_starting.newValue);
+    renderAuto();
+  }
   if (area !== "local") return;
   if (changes.scrape_state) {
     scrapeState = changes.scrape_state.newValue || null;
     renderScrape();
+    renderAuto(); // "Start automation" is off while a scrape runs
+  }
+  if (changes.auto_state) {
+    autoState = changes.auto_state.newValue || null;
+    renderAuto();
+    renderScrape(); // the sites' Start buttons are off while the automation runs
   }
   if (changes.li_partial) renderPartialCount(changes.li_partial.newValue);
 }
@@ -102,6 +130,7 @@ function fillForm(s) {
     if (el.type === "checkbox") el.checked = !!value;
     else if (el.type === "radio") el.checked = el.value === value;
     else if (el.dataset.kind === "list") el.value = (value || []).join(", ");
+    else if (el.dataset.kind === "lines") el.value = (value || []).join("\n");
     else el.value = value == null ? "" : value;
   }
 }
@@ -113,6 +142,7 @@ function readForm(s) {
     if (el.type === "checkbox") setPath(s, path, el.checked);
     else if (el.type === "radio") { if (el.checked) setPath(s, path, el.value); }
     else if (el.dataset.kind === "list") setPath(s, path, splitList(el.value));
+    else if (el.dataset.kind === "lines") setPath(s, path, splitLines(el.value)); // links contain commas
     else if (el.type === "number") setPath(s, path, clampInt(el.value, el.min, el.max, getPath(s, path)));
     else setPath(s, path, el.value.trim());
   }
@@ -135,6 +165,7 @@ async function saveSettings() {
   }
   settings = next;
   dirty = false;
+  autoStartWarned = false; // the next unsaved edit warns again
   fillForm(settings); // show the cleaned-up values (trimmed lists, clamped numbers)
   updateLinkedInUi();
   showStatus("Saved ✓");
@@ -143,6 +174,7 @@ async function saveSettings() {
 
 function markDirty() {
   dirty = true;
+  autoStartWarned = false; // a new edit after the warning: Start automation warns again
   showStatus("Unsaved changes");
 }
 
@@ -174,9 +206,20 @@ async function clearPartialList() {
   }
 }
 
+// Opera (and some other Chromium browsers) have no chrome.sidePanel: the button is off and a note says why.
+function hasSidePanel() {
+  return !!(chrome.sidePanel && typeof chrome.sidePanel.open === "function");
+}
+
+function updateSidePanelUi() {
+  $("openSidePanel").disabled = !hasSidePanel();
+  $("noSidePanel").hidden = hasSidePanel();
+}
+
 // Chrome only opens the side panel from a user gesture, so this runs directly in the click handler
 // with no await before the call (that is why activeTab was looked up when the popup opened).
 function openSidePanel() {
+  if (!hasSidePanel()) return;
   if (!activeTab) {
     showStatus("No active tab", true);
     return;
@@ -196,6 +239,7 @@ function buildScrapeBoxes() {
 
 function renderScrape() {
   const runningSite = scrapeState && scrapeState.running ? scrapeState.site : null;
+  const autoRunning = !!(autoState && autoState.running);
 
   for (const box of document.querySelectorAll(".scrape")) {
     const site = box.dataset.site;
@@ -209,12 +253,15 @@ function renderScrape() {
       : state.waitReason ? "waiting" : "running";
     for (const cell of box.querySelectorAll("[data-count]")) cell.textContent = counts[cell.dataset.count] || 0;
 
-    box.querySelector('[data-action="start"]').disabled = !!runningSite || !onSearchPage;
+    box.querySelector('[data-action="start"]').disabled = autoRunning || !!runningSite || !onSearchPage;
     box.querySelector('[data-action="stop"]').disabled = !(state && state.running);
     box.querySelector('[data-action="resume"]').disabled = !(state && state.paused);
 
     let hint = "";
-    if (runningSite && runningSite !== site) {
+    if (autoRunning) {
+      // Stop / Resume stay usable: Resume is how you continue after solving a captcha in the automation window.
+      hint = "The automation is running (Automation tab), so Start is off until it ends.";
+    } else if (runningSite && runningSite !== site) {
       hint = "A scrape is already running on " + (SITE_LABEL[runningSite] || runningSite) + ".";
     } else if (!runningSite && !onSearchPage) {
       hint = "Open a " + SITE_LABEL[site] + " search results page in this tab to start.";
@@ -241,7 +288,8 @@ async function onScrapeButton(site, action) {
 
   if (action === "start") {
     if (dirty && !(await saveSettings())) return; // the scraper reads settings when it starts
-    const reply = await sendToTab(activeTab && activeTab.id, { type: "scrapeStart" });
+    // "manual": you are watching, so the lanes and gaps from the settings apply (scraper-core.js jfsJdPace)
+    const reply = await sendToTab(activeTab && activeTab.id, { type: "scrapeStart", mode: "manual" });
     hint.textContent = reply.error ? "Could not start: " + reply.error : "Starting…";
     return;
   }
@@ -303,6 +351,129 @@ async function clearRepostList(button) {
 }
 
 
+// ─── Automation tab ─────────────────────────────────────────────────────────────────────────────
+
+function renderAuto() {
+  const auto = autoState;
+  const running = !!(auto && auto.running);
+  const scraping = !!(scrapeState && scrapeState.running);
+
+  const status = $("autoStatus");
+  if (autoStartPending && !running) {
+    status.textContent = "Starting… checking the backend (up to 2 minutes)";
+    status.dataset.mode = "waiting";
+  } else if (running) {
+    const current = auto.items[auto.index];
+    status.textContent = "Running · search " + Math.min(auto.index + 1, auto.items.length) + " of " + auto.items.length
+      + (current ? " · " + current.label + ": " + AUTO_STATUS_TEXT[current.status] : "");
+    status.dataset.mode = current && current.status === "waiting_for_you" ? "waiting" : "running";
+  } else {
+    status.textContent = "Idle";
+    status.dataset.mode = "idle";
+  }
+
+  $("autoItems").replaceChildren(...((auto && auto.items) || []).map(autoItemRow));
+
+  const last = [];
+  if (auto && !running && auto.finishedAt) {
+    last.push("Last run: " + new Date(auto.finishedAt).toLocaleString() + " — " + (auto.summary || ""));
+  }
+  if (auto && auto.notes && auto.notes.length) last.push(auto.notes.join("; "));
+  $("autoLast").textContent = last.join(" · ");
+
+  $("autoStart").disabled = running || autoStartPending || scraping;
+  $("autoStop").disabled = !running && !autoStartPending;
+  const scrapingHint = !running && scraping
+    ? "A " + (SITE_LABEL[scrapeState.site] || scrapeState.site) + " scrape is running: stop it first (its tab here)."
+    : "";
+  $("autoHint").textContent = autoMessage || scrapingHint;
+}
+
+// One line per saved search: "Glassdoor 1/3 · running · 4 matched", its link, and why it ended / waits.
+function autoItemRow(item) {
+  const row = document.createElement("li");
+  row.dataset.status = item.status;
+  const head = document.createElement("div");
+  head.className = "head";
+  const matched = item.counts ? (item.counts.matched || 0) + " matched" : "";
+  head.append(
+    textBox("span", "label", item.label || SITE_LABEL[item.site] || item.site),
+    textBox("span", "state", [AUTO_STATUS_TEXT[item.status] || item.status, matched].filter(Boolean).join(" · ")),
+  );
+  row.append(head, textBox("div", "url", shortUrl(item.url)));
+  if (item.reason) row.append(textBox("div", "why", item.reason));
+  return row;
+}
+
+function textBox(tag, className, text) {
+  const el = document.createElement(tag);
+  el.className = className;
+  el.textContent = text;
+  return el;
+}
+
+// "glassdoor.co.in/Job/india-"TensorFlow"-OR-"Pandas"…" — enough to tell the searches apart.
+function shortUrl(url) {
+  const parsed = parseUrl(url);
+  if (!parsed) return String(url);
+  let path = parsed.pathname + parsed.search;
+  try {
+    path = decodeURIComponent(path);
+  } catch (_) {
+    // keep it encoded
+  }
+  const text = parsed.hostname.replace(/^www\./, "") + path;
+  return text.length > 55 ? text.slice(0, 54) + "…" : text;
+}
+
+async function startAutomation() {
+  if (dirty && !autoStartWarned) {
+    autoStartWarned = true;
+    showStatus("Unsaved changes! Save first, or press Start automation again to run with the saved settings.", true);
+    return;
+  }
+  autoStartWarned = false;
+  autoStartPending = true;
+  autoMessage = "";
+  renderAuto();
+  let reply;
+  try {
+    reply = (await chrome.runtime.sendMessage({ type: "autoStart" })) || { error: "no reply" };
+  } catch (err) {
+    reply = { error: errorText(err) };
+  } finally {
+    autoStartPending = false;
+  }
+  autoMessage = reply.error === "cancelled" ? "Start cancelled (Stop automation)."
+    : reply.error ? "Could not start: " + reply.error : "";
+  renderAuto();
+}
+
+// Is the background checking the backend for a Start right now (pressed in an earlier popup, or the browser opened)?
+async function readAutoStarting() {
+  try {
+    return isFreshStart((await chrome.storage.session.get("auto_starting")).auto_starting);
+  } catch (_) {
+    return false; // no storage.session in this browser: only this popup's own Start shows "Starting…"
+  }
+}
+
+function isFreshStart(since) {
+  return typeof since === "number" && Date.now() - since < AUTO_STARTING_MAX_MS;
+}
+
+async function stopAutomation() {
+  let reply;
+  try {
+    reply = (await chrome.runtime.sendMessage({ type: "autoStop" })) || { ok: true };
+  } catch (err) {
+    reply = { error: errorText(err) };
+  }
+  autoMessage = reply.error ? "Could not stop: " + reply.error : "";
+  renderAuto();
+}
+
+
 // ─── AI tab ─────────────────────────────────────────────────────────────────────────────────────
 
 async function checkHealth() {
@@ -358,6 +529,11 @@ function setPath(obj, path, value) {
 // "a, b,\n c" → ["a", "b", "c"]. Commas or new lines both separate entries.
 function splitList(text) {
   return String(text).split(/[,\n]/).map((part) => part.trim()).filter(Boolean);
+}
+
+// One entry per line (search links contain commas). Blank lines are dropped.
+function splitLines(text) {
+  return String(text).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }
 
 // Number inputs: keep within the input's own min/max attributes; an empty or garbage value keeps the old setting.

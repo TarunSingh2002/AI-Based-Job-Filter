@@ -79,9 +79,12 @@ one isn't on any list.
    Reposts vanish right away; the popup counts them under **reposts**.
 3. It stops by itself after `maxPages` pages (default 10), or press **Stop**. A desktop notification tells you when a
    run finishes (with its counts) or pauses (with the reason), and the extension icon shows a red **!** while paused.
-   - **Speed:** Glassdoor and Indeed read 3 job pages at the same time, Naukri 2 (popup: "Job pages read at once" /
+   - **Speed:** Glassdoor reads 3 job pages at the same time, Naukri 2 (popup: "Job pages read at once" /
      "Job pages open at once", 1-4). Lower it if a site keeps rate-limiting you. This is the fast pace for when you
-     sit at the screen; the automation (section 4) reads Indeed and Glassdoor one job page at a time.
+     sit at the screen; the automation (section 4) reads Glassdoor one job page at a time.
+   - **Indeed** opens each job in its own right-hand panel (it clicks the job title, like you would) and reads the
+     description there, about 1 s per job. You will see the panel change as it goes. Indeed blocked the older
+     background method after a while, so this is always one job at a time.
    - **Rate limits:** reading job pages quickly sometimes gets a "security check" / 403 / 429 answer. The run then
      waits by itself (30 s, then 60 s, then 120 s; the popup shows "waiting 60s (site rate limit), retry at …") and
      retries the same job. You don't need to do anything; only if the site still blocks after the 120 s wait does

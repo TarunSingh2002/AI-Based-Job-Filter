@@ -136,6 +136,8 @@ function jfsJdLanes(siteSettings) {
  */
 function jfsJdPace(mode, site, siteSettings) {
   if (mode === 'automation' && (site === 'indeed' || site === 'glassdoor')) return { lanes: 1, gapMs: null };
+  // Indeed reads each description from its single right-hand panel (one job at a time), so one lane always.
+  if (site === 'indeed') return { lanes: 1, gapMs: JFS_GAP_MS.jobPage };
   return { lanes: jfsJdLanes(siteSettings), gapMs: JFS_GAP_MS.jobPage };
 }
 

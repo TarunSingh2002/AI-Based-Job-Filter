@@ -603,8 +603,11 @@ Site specifics (verified live 2026-10-14 unless noted):
 - **Indeed** (`in.indeed.com/jobs?...`): card `li.css-1ac2h1w` containing `a.jcs-JobTitle` (skip cards whose `.cardOutline` has aria-hidden="true");
   job id = `a.jcs-JobTitle[data-jk]`; title `a.jcs-JobTitle span[title]` (attr `title`); company `[data-testid="company-name"]`;
   location `[data-testid="text-location"]`; saved = `button.bookmark[aria-pressed="true"]`; save = click `button.bookmark` if aria-pressed false;
-  link = `${location.origin}/viewjob?jk=${jk}`; JD = `fetch('/viewjob?jk=JK', {credentials:'include'})` → DOMParser →
-  `script[type="application/ld+json"]` JobPosting `.description` (HTML → text), fallback `#jobDescriptionText`;
+  link = `${location.origin}/viewjob?jk=${jk}` (for the CSV). JD (since 2026-10-18): click the card's title link → Indeed
+  opens the job in its own right-hand panel `#jobsearch-ViewjobPaneWrapper` (URL gets `vjk=JK`); read
+  `.react-native-html-content` (fallback `#jobDescriptionText`) once vjk = JK, the panel's first line matches the card
+  title, the text is ≥ 200 chars and unchanged for 400 ms (timeout 15 s → '' → backend "no_jd"). Always ONE lane on Indeed
+  (one panel). Background `fetch('/viewjob')` was dropped: Indeed rate-limited / bot-checked it (403 + backoff loops).
   next = `a[data-testid="pagination-page-next"]` href → navigate. Block: title/body contains "Just a moment", "Verify you are human", "captcha".
 - **Glassdoor** (`glassdoor.co.in|com/Job/...`; selectors from the existing working extension, NOT re-verified live because of a Cloudflare check):
   card `li[data-test="jobListing"]` (id `data-jobid`); title `a[data-test="job-title"]` (href = job page); company `span[class*="EmployerProfile_compactEmployerName"]`

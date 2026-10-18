@@ -15,14 +15,42 @@ const INDEED_SEL = {
   location: '[data-testid="text-location"]',
   bookmark: 'button.bookmark', // aria-pressed="true" when saved
   next: 'a[data-testid="pagination-page-next"]',
-  jdFallback: ['#jobDescriptionText'], // used when the job page has no JSON-LD JobPosting
+  // The right-hand job panel (verified live 2026-10-18): its first line is the job title, the description is in
+  // .react-native-html-content (new layout); #jobDescriptionText is the older layout.
+  pane: '#jobsearch-ViewjobPaneWrapper',
+  paneJd: ['.react-native-html-content', '#jobDescriptionText'],
 };
-// Pause message when job pages stay blocked after the engine's waits (a short 403 / 429 burst never gets here).
+const INDEED_PANE_TIMEOUT_MS = 15000; // the panel normally shows the clicked job within 1-1.5 s
+const INDEED_PANE_STABLE_MS = 400; // the description renders in chunks: wait until it stops changing
+// Pause message when the job panel keeps showing a check page after the engine's waits.
 const INDEED_JOB_BLOCKED =
-  'Indeed answers job pages with a security check. Open any job from the list in a new tab, pass the check yourself, then press Resume';
+  'Indeed is showing a security check. Solve it yourself in this tab, then press Resume';
 
 function indeedIsSaved(card) {
   return !!card.querySelector(`${INDEED_SEL.bookmark}[aria-pressed="true"]`);
+}
+
+/** The job currently open in Indeed's right-hand panel: {title, jd} ('' when the panel is empty). */
+function indeedPane() {
+  const pane = document.querySelector(INDEED_SEL.pane);
+  if (!pane) return { title: '', jd: '' };
+  let jd = '';
+  for (const selector of INDEED_SEL.paneJd) {
+    const el = pane.querySelector(selector);
+    const text = el ? (el.innerText || el.textContent || '').trim() : '';
+    if (text) {
+      jd = text;
+      break;
+    }
+  }
+  return { title: (pane.innerText || '').split('\n')[0].trim(), jd };
+}
+
+/** Loose title compare: the panel and the card can differ in punctuation / spacing. */
+function indeedSameTitle(a, b) {
+  const x = jfNormalize(a);
+  const y = jfNormalize(b);
+  return !!x && !!y && (x === y || x.includes(y) || y.includes(x));
 }
 
 const indeedAdapter = {
@@ -61,9 +89,40 @@ const indeedAdapter = {
     await jfsClickAndWait(button, () => indeedIsSaved(li));
   },
 
-  /** Same-origin fetch of the job page; the JD comes from its JSON-LD JobPosting (fallback #jobDescriptionText). → {jd, blocked} */
+  /**
+   * Opens the job in Indeed's own right-hand panel by clicking its card title - what you do by hand - and reads the
+   * description there. Background fetches of /viewjob pages got rate-limited / bot-checked by Indeed (2026-10-18);
+   * the panel loads through Indeed's normal requests. One job at a time (the panel shows one job). → {jd, blocked}
+   * No JD in time → '' (the backend answers "no_jd": the job stays visible and is tried again on a later run).
+   */
   async fetchJd(job) {
-    return jfsFetchJobPage(`/viewjob?jk=${encodeURIComponent(job.job_id)}`, INDEED_SEL.jdFallback, INDEED_JOB_BLOCKED);
+    const link = document.querySelector(`${INDEED_SEL.titleLink}[data-jk="${CSS.escape(String(job.job_id))}"]`);
+    if (!link) return { jd: '', blocked: null }; // the card left the list (re-render): skip it, it stays visible
+    const before = indeedPane();
+    link.click();
+    const deadline = Date.now() + INDEED_PANE_TIMEOUT_MS;
+    let last = '';
+    let stableSince = 0;
+    while (Date.now() < deadline) {
+      await jfsSleep(200);
+      if (jfsPageLooksBlocked(true)) return { jd: '', blocked: INDEED_JOB_BLOCKED }; // check page in the title
+      const pane = indeedPane();
+      const opened = new URLSearchParams(location.search).get('vjk') === String(job.job_id);
+      // The old description can sit under the new title for a moment; identical text is fine only for the same title
+      // (a company's repost with the very same description).
+      const fresh = pane.jd !== before.jd || indeedSameTitle(before.title, pane.title);
+      if (!opened || pane.jd.length < 200 || !fresh || !indeedSameTitle(pane.title, job.title)) {
+        last = ''; // not ready: the stability wait starts over once it is
+        continue;
+      }
+      if (pane.jd !== last) {
+        last = pane.jd;
+        stableSince = Date.now();
+      } else if (Date.now() - stableSince >= INDEED_PANE_STABLE_MS) {
+        return { jd: pane.jd, blocked: null };
+      }
+    }
+    return { jd: '', blocked: null };
   },
 
   async nextPage() {

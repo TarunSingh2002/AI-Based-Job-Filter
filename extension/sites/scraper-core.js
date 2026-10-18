@@ -14,9 +14,8 @@
 // wait 30 s, 60 s, 120 s and retry the same job; the run pauses only when the site still blocks after the third
 // wait. A captcha on the results page itself pauses at once. We never try to solve or get around a captcha.
 //
-// Two speeds (scrape_state.mode): "manual" = you pressed Start in the popup and watch the screen: lanes and gaps
-// as set. "automation" = the background's automation started the run (nobody watching): Indeed and Glassdoor read
-// ONE job page at a time with no extra gap; Naukri is the same in both modes (see jfsJdPace).
+// One speed (jfsJdPace): a popup Start and the automation run exactly the same way (scrape_state.mode only records
+// who started the run). Lanes and gaps as set in the popup; Indeed always one job at a time (its single job panel).
 // Long waits are ONE timer that Stop / Pause wake early (nap), not a chain of short polls: the browser slows the
 // timers of a window that is covered or minimized, and a chain of short timers then crawls.
 //
@@ -75,19 +74,43 @@ async function jfsWaitFor(check, timeoutMs, intervalMs = 300) {
   }
 }
 
+/**
+ * True once the extension was reloaded or removed: this copy of the script is orphaned (the page still runs it, but
+ * it can never reach the extension again). The new extension doesn't re-inject into open tabs: refresh the tab.
+ */
+function jfsOrphaned() {
+  try {
+    return !chrome.runtime || !chrome.runtime.id;
+  } catch (e) {
+    return true;
+  }
+}
+
 /** chrome.runtime.sendMessage as a promise that never rejects: every failure comes back as {error}. */
 function jfsSend(message) {
   return new Promise((resolve) => {
+    if (jfsOrphaned()) {
+      if (typeof JFScraper !== 'undefined') JFScraper.retire(); // stop quietly instead of logging an error per step
+      resolve({ error: 'extension reloaded', orphaned: true });
+      return;
+    }
     try {
       chrome.runtime.sendMessage(message, (reply) => {
         const err = chrome.runtime.lastError; // reading it also silences "Unchecked runtime.lastError"
-        if (err) resolve({ error: err.message || String(err) });
+        if (err) resolve(jfsSendError(err.message || String(err)));
         else resolve(reply || { error: 'empty reply' });
       });
     } catch (e) {
-      resolve({ error: String((e && e.message) || e) }); // e.g. "Extension context invalidated" after a reload
+      resolve(jfsSendError(String((e && e.message) || e))); // e.g. "Extension context invalidated" after a reload
     }
   });
+}
+
+/** A failed message; an extension reload in the middle of it also retires this orphaned copy (see jfsOrphaned). */
+function jfsSendError(message) {
+  if (!jfsOrphaned() && !/context invalidated/i.test(message)) return { error: message };
+  if (typeof JFScraper !== 'undefined') JFScraper.retire();
+  return { error: message, orphaned: true };
 }
 
 /** Visible text of an element, whitespace collapsed ('' when the element is missing). */
@@ -129,15 +152,13 @@ function jfsJdLanes(siteSettings) {
 }
 
 /**
- * How the JD stage reads job pages: {lanes, gapMs} (gapMs null = no gap).
- * Automation on Indeed / Glassdoor: one page at a time, no gap. Nobody is watching to solve a check page, and one
- * at a time trips far fewer rate limits; the page fetch + the AI call already take a few seconds per job.
- * Everything else (a popup Start, and Naukri in both modes): the lanes from the settings + the polite gap.
+ * How the JD stage reads job pages: {lanes, gapMs}. The same for a popup Start and the automation (`mode` is kept
+ * for the call site only): the lanes from the settings + the polite gap; Indeed always one lane (its job panel).
  */
 function jfsJdPace(mode, site, siteSettings) {
-  if (mode === 'automation' && (site === 'indeed' || site === 'glassdoor')) return { lanes: 1, gapMs: null };
   // Indeed reads each description from its single right-hand panel (one job at a time), so one lane always.
   if (site === 'indeed') return { lanes: 1, gapMs: JFS_GAP_MS.jobPage };
+  // The same pace for a popup Start and the automation: the manual pace has proven reliable on Glassdoor and Naukri.
   return { lanes: jfsJdLanes(siteSettings), gapMs: JFS_GAP_MS.jobPage };
 }
 
@@ -270,6 +291,7 @@ const JFScraper = {
   blockLevel: 0, // rate-limit waits in a row so far (index into JFS_BACKOFF_SECONDS)
   lastBlockAt: 0, // when the last blocked job page started a wait (see backOff)
   sleepers: new Set(), // wake-up functions of the naps in progress (see nap)
+  orphaned: false, // the extension was reloaded under this page (see retire)
 
   // ---------- wiring: every site file calls these three on page load ----------
 
@@ -376,7 +398,7 @@ const JFScraper = {
 
   // ---------- popup / automation commands ----------
 
-  /** mode "automation" = started by the background's automation (slower JD pace, see jfsJdPace); else "manual". */
+  /** mode "automation" = started by the background's automation, else "manual" (recorded only; same pace). */
   async start(mode) {
     if (this.isBusy()) return this.state; // already running on this page
     const settings = await jfLoadSettings();
@@ -751,7 +773,18 @@ const JFScraper = {
   // ---------- state ----------
 
   alive(token) {
-    return token === this.runId && !!this.state && this.state.running && !this.state.paused;
+    return !this.orphaned && token === this.runId && !!this.state && this.state.running && !this.state.paused;
+  },
+
+  /**
+   * The extension was reloaded while this page ran a scrape ("Extension context invalidated"): every loop exits
+   * quietly. The run itself is cleaned up by the reloaded extension; refresh the tab and press Start / Resume.
+   */
+  retire() {
+    if (this.orphaned) return;
+    this.orphaned = true;
+    this.cancelLoops();
+    this.activeRunId = 0;
   },
 
   isBusy() {
@@ -788,6 +821,7 @@ const JFScraper = {
   },
 
   async countError(why) {
+    if (this.orphaned) return; // not a real error: the extension was reloaded under this page
     console.warn('[JobFilter]', why);
     this.state.counts.errors += 1;
     this.errorsInRow += 1;
@@ -832,9 +866,9 @@ const JFScraper = {
    * `await save()` the next page can resume from it. If the background can't be reached, write it ourselves.
    */
   async save() {
-    if (!this.state) return;
+    if (!this.state || this.orphaned) return;
     const reply = await jfsSend({ type: 'scrapeProgress', state: this.state });
-    if (!reply.error) return;
+    if (!reply.error || reply.orphaned) return; // orphaned: storage is unreachable from here too
     try {
       await chrome.storage.local.set({ scrape_state: this.state });
     } catch (e) {

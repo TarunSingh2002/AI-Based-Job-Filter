@@ -80,8 +80,8 @@ one isn't on any list.
 3. It stops by itself after `maxPages` pages (default 10), or press **Stop**. A desktop notification tells you when a
    run finishes (with its counts) or pauses (with the reason), and the extension icon shows a red **!** while paused.
    - **Speed:** Glassdoor reads 3 job pages at the same time, Naukri 2 (popup: "Job pages read at once" /
-     "Job pages open at once", 1-4). Lower it if a site keeps rate-limiting you. This is the fast pace for when you
-     sit at the screen; the automation (section 4) reads Glassdoor one job page at a time.
+     "Job pages open at once", 1-4). Lower it if a site keeps rate-limiting you. The automation (section 4) runs at
+     exactly the same pace.
    - **Indeed** opens each job in its own right-hand panel (it clicks the job title, like you would) and reads the
      description there, about 1 s per job. You will see the panel change as it goes. Indeed blocked the older
      background method after a while, so this is always one job at a time.
@@ -134,9 +134,9 @@ What happens:
 - It opens **its own window** and runs your saved searches one after another: Naukri, then Indeed, then Glassdoor
   (each list from top to bottom), with each site tab's settings (max pages, hide saved, save processed, ...).
   Results go to `jobs.xlsx` as usual. Keep working in your other windows; don't minimize the automation window.
-- **Pace:** during the automation, Indeed and Glassdoor read one job page at a time (fewer security checks; the AI
-  call already takes a few seconds per job). Naukri runs as set in its tab. Pressing **Start** in a site's tab
-  yourself is still the fast pace.
+- **Pace:** exactly the same as pressing **Start** in a site's tab yourself (the settings in each site's tab).
+- **Reloaded the extension during a run?** The open page's old copy of the scraper stops quietly; refresh the tab
+  and start again (the backend remembers every job already judged, so nothing is done twice).
 - **A captcha:** that site pauses and you get ONE notification "Indeed needs you". Click it (it brings the
   automation window to the front), solve the captcha there, then extension icon → that site's tab → **Resume**.
   Nobody there within 10 minutes ("Wait for me to solve a captcha", Automation tab)? That search is marked

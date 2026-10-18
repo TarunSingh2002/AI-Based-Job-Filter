@@ -555,11 +555,12 @@ rules → hide; collect remaining → `screenTitle` in batches of ≤20 →
   default 2), clamped 1–4. The lanes share one queue (`shift()`, so no job is read twice); each lane reads one job at a
   time: polite random gap **300–900 ms** → `fetchJd` → `screenJd` → hide card, highlight, markProcessed(if "all", or
   "rejected" and rejected; then **150–400 ms** gap) → counts → `scrapeProgress`.
-- **Pace by mode** (`jfsJdPace(mode, site, siteSettings)`, `scrape_state.mode`): `"manual"` (popup Start: the user sits
-  at the screen and solves captchas, so it must be fast) = exactly the above. `"automation"` (3.7: nobody watching) on
-  **Indeed and Glassdoor** = ONE lane whatever `jdParallel` says, and NO gap before a job page (0 ms: the page fetch +
-  the AI call already take a few seconds; a slower pace would make the run last hours). Naukri is the same in both
-  modes (its `jdTabs` lanes + gaps). The save-click gap, the results-page gap and the back-off below apply in both modes.
+- **One pace** (`jfsJdPace(mode, site, siteSettings)`): a popup Start (`scrape_state.mode` "manual") and the automation
+  ("automation", 3.7) run identically — the manual pace proved reliable on Glassdoor and Naukri (2026-10-18). Indeed is
+  always ONE lane (it reads from its single job panel). `mode` is only recorded.
+- **Orphaned page script**: after an extension reload, the old content script in an open tab can't reach the extension
+  ("Extension context invalidated"). `jfsOrphaned()` / `jfsSendError()` detect it and `JFScraper.retire()` stops every
+  loop quietly (no error counting, no storage writes); the reloaded extension cleans up the run state.
 After the page: random delay **1–2 s** → `nextPage()`; stop at `maxPages`, "none", user stop, or `detectBlock()` → `paused`
 with reason (user solves captcha/login themselves, then presses Resume). Never try to solve or bypass a captcha/challenge.
 On page load each site file calls `JFScraper.resumeIfRunning(adapter)` which continues when `scrape_state.running && site matches && tabId matches`.

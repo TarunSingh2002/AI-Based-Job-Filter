@@ -151,12 +151,15 @@ def decide_jd(job: dict, answers: dict[str, Answer], profile: Profile) -> dict:
     years = parse_job_years(job.get("experience_text"), job.get("jd"))
     if years:
         min_years, max_years = years
-        years_trusted = True
+        too_many_years = _needs_too_many_years(min_years, profile)
     else:
         ai_years = answers.get("min_years")
         min_years = MIN_YEARS_VALUE.get(ai_years.choice) if ai_years else None
         max_years = None
-        years_trusted = ai_years is not None and ai_years.confidence >= profile.reject_confidence
+        p_over, years_over = _ai_years_over_limit(ai_years, profile) if ai_years else (0.0, None)
+        too_many_years = p_over >= profile.reject_confidence
+        if too_many_years:
+            min_years = years_over  # the most likely of the too-high answers, for the reason text
 
     fields = {
         "match_score": position_score + skills_score, "position_score": position_score,
@@ -170,7 +173,7 @@ def decide_jd(job: dict, answers: dict[str, Answer], profile: Profile) -> dict:
 
     if unwanted >= profile.reject_confidence:
         return verdict("reject", f"role: {top_unwanted} ({unwanted:.2f})", unwanted)
-    if years_trusted and _needs_too_many_years(min_years, profile):
+    if too_many_years:
         return verdict("reject", f"needs {min_years}+ yrs")
     if max_years is not None and max_years < profile.experience_years - profile.experience_tolerance:
         return verdict("reject", f"overqualified (max {max_years} yrs)")
@@ -180,6 +183,19 @@ def decide_jd(job: dict, answers: dict[str, Answer], profile: Profile) -> dict:
 def _round_half_up(x: float) -> int:
     """Python's round() rounds half to even (2.5 -> 2, 3.5 -> 4); a score should not depend on that."""
     return int(x + 0.5)
+
+
+def _ai_years_over_limit(answer: Answer, profile: Profile) -> tuple[float, int | None]:
+    """The AI's min_years answer as (probability that the job asks for more years than you accept, the most likely
+    of those values). The AI often splits between neighbours ("7 years" 0.4, "8 or more" 0.4): like the role check,
+    the summed probability decides, not the single top choice's confidence."""
+    limit = profile.experience_years + profile.experience_tolerance
+    probabilities = answer.probabilities or {answer.choice: answer.confidence}
+    over = {opt: p for opt, p in probabilities.items()
+            if MIN_YEARS_VALUE.get(opt) is not None and MIN_YEARS_VALUE[opt] > limit}
+    if not over:
+        return 0.0, None
+    return sum(over.values()), MIN_YEARS_VALUE[max(over, key=over.get)]
 
 
 def _needs_too_many_years(min_years: int | None, profile: Profile) -> bool:

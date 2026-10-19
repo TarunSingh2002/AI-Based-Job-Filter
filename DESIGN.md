@@ -306,8 +306,11 @@ Title decision, in this order:
    `title ok: <choice> (wanted <p_wanted>)`, confidence = role confidence.
 So with the filter on, a job that is both too senior and an unwanted type is rejected as `seniority: ...` (a reject
 either way); with it off (default), "Senior Data Scientist" / "Lead AI Engineer" go to the role question like any title.
-JD decision (in this order): p_unwanted ≥ reject_confidence → reject `role: ...`; min_years (parsed, or AI when
-confident) > exp + tol → reject; max_years parsed and max_years < experience_years - tolerance → reject `overqualified`;
+JD decision (in this order): p_unwanted ≥ reject_confidence → reject `role: ...`; min_years > exp + tol → reject
+`needs N+ yrs` — parsed by experience.py (card text first, then JD; look-alike dashes ‐ ‑ ‒ ― − ﹣ － are read as "-"), or,
+only when nothing parses, the AI's `min_years` choice judged by the SUMMED probability of the options above the limit
+(≥ reject_confidence; e.g. "7 years" 0.45 + "8 or more" 0.35 = 0.8 → reject); max_years parsed and max_years <
+experience_years - tolerance → reject `overqualified`;
 else pass `position <p>/5, skills <s>/5`. **No skills reject.**
 position_score = round_half_up(5 × p_wanted) (0–5); skills_score = skills level (0–5); match_score = position + skills
 (0–10, set on JD rejects too). Overall confidence = min(role_family.confidence, skills_match.confidence).

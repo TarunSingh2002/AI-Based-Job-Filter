@@ -76,10 +76,16 @@ SENTENCE_END = re.compile(r"[.!?;\n](?!\d)")
 MAX_SANE_YEARS = 15
 
 
+# Job posts pasted from Word/Docs use look-alike dashes ("8‐11", "8‑11", "8−11"); the patterns only know "-", "–", "—".
+# Without this, "Experience: 8‑11 Years" was not read and the job slipped through on a low-confidence AI guess.
+DASH_LOOKALIKES = re.compile("[‐‑‒―−﹘﹣－]")
+
+
 def parse_experience(text: str | None) -> tuple[int, int | None] | None:
     """Return (min_years, max_years or None), or None when the text states no clear experience requirement."""
     if not text:
         return None
+    text = DASH_LOOKALIKES.sub("-", text)
 
     requirements = set(_find_requirements(text))
     if len(requirements) == 1:

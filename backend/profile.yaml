@@ -1,9 +1,11 @@
 # Your candidate profile. decide.py takes every threshold from here - restart the backend after editing.
 
 # ── Experience ────────────────────────────────────────────────────────────────────────────────────
-experience_years: 1            # SET THIS: your years of work experience
-experience_tolerance: 2        # accept jobs asking for up to experience_years + this many years
-                               # (and treat jobs capped below experience_years - this as "overqualified")
+experience_years: 1.5          # SET THIS: your years of work experience
+experience_tolerance: 0.5      # accept jobs asking for up to experience_years + this many years
+                               # -> 1.5 + 0.5 = jobs whose MINIMUM is at most 2 years ("0-2", "1-3", "2+" pass;
+                               #    "3-5", "5+", "8-11" are rejected) on every site: LinkedIn, Naukri, Indeed, Glassdoor
+                               # (and jobs capped below experience_years - this, here under 1 year, are "overqualified")
 
 # ── The positions you want (position first: skills never reject a job) ──────────────────────────
 # Only these role types are wanted. Every other type is unwanted and rejected when the AI is sure

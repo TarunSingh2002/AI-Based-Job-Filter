@@ -153,6 +153,10 @@ code {
 .auto-items li[data-status="error"] .state { color: var(--bad); }
 textarea[data-kind="lines"] { font: 11px ui-monospace, Consolas, monospace; white-space: pre; overflow-x: auto; }
 
+/* ── Debug log box (Glassdoor / Naukri / Indeed / AI tabs) ── */
+.debug [data-role="debugStatus"] { margin: 6px 0 0; color: var(--good); }
+.debug [data-role="debugStatus"]:empty { display: none; }
+
 /* ── AI tab ── */
 .health-row { margin-bottom: 8px; }
 .health { flex: 1; min-width: 0; font-size: 12px; overflow-wrap: anywhere; }

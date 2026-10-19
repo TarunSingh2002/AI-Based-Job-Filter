@@ -22,7 +22,7 @@ AI-Based-Job-Filter/       ← repo root (v2; the old v1 code is git tag v1-old-
 card on page
   → [1] RULES (extension, instant, free): blacklisted company / blacklisted title keyword /
          whitelist (title must contain one) / hide saved / promoted handling
-  → [2] TITLE    (backend /screen/title): repost of a (title, company) already screened in this site group → hidden,
+  → [2] TITLE    (backend /screen/title): repost of a job (same title, company[, city, experience]) already screened in this site group → hidden,
                  no AI (2.2); else card years by regex (free, before any AI call) → reject (+ seniority words,
                  only when profile.yaml sets the optional allowed_seniority — off by default, 2.5);
                  else AI role type from title + company → pass | reject
@@ -52,7 +52,7 @@ backend/
   questions.py        THE PROMPT: all question definitions for title + JD stages (section 2.4)
   decide.py           pure-code decisions (role probabilities, experience comparison, scores, optional seniority regex) — no AI here
   experience.py       regex parser: "3-8 Yrs", "2+ years", "minimum 3 years", "0-1 years", "fresher" → (min,max)
-  dedupe.py           repost key (normalized title|company) + site groups (section 2.2); company_name() also used by clean_jd
+  dedupe.py           repost key (normalized title|company[|location|experience]) + site groups (section 2.2); company_name() also used by clean_jd
   store.py            SQLite cache + repost lists (data/jobs.db) + CSV writer (output/<date>/...) + keeps jobs.xlsx up to date
   excel.py            jobs.xlsx builder (openpyxl): the day's CSVs as sortable Excel tables (section 2.7)
   automation.py       marker files of the "Start automation" run: automation-started/-finished.json (section 2.2)
@@ -106,7 +106,10 @@ OUTPUT_DIR (`output`), DB_PATH (`data/jobs.db`), PROFILE_PATH (`profile.yaml`) h
      Glassdoor merged into Indeed on 2026-07-01, a third of Glassdoor's jobs also show on Indeed); linkedin → none.
      key = normalized title + `|` + normalized company (lowercase, punctuation → space, spaces collapsed; trailing company
      suffixes pvt/private/ltd/limited/inc/llp/llc/corp/corporation/co/company/technologies/technology/solutions/india/
-     plc/pte/gmbh/opc stripped, at least one word kept). No key when title or company is empty. If the key is held by a
+     plc/pte/gmbh/opc stripped, at least one word kept). When the card has BOTH a location and an experience text
+     (Naukri), `|` + normalized location + `|` + normalized experience_text are appended: the same role in another city
+     or for another experience range is a different opening, not a repost. Indeed and Glassdoor cards have no
+     experience text, so their key stays title|company. No key when title or company is empty. If the key is held by a
      DIFFERENT (site, job_id) → `{job_id, decision:"reject", reason:"repost of <site> <job_id>", confidence:1.0,
      stage:"title", cached:true, final:true, duplicate:true, match_score:null}` — no AI call, no CSV row, not cached
      (so clearing the list brings it back).
@@ -458,6 +461,9 @@ Other storage keys (chrome.storage.local):
   else null — cleared by pause / stop / end / Resume; `pauseReason` after a stop = the scrapeStop reason, default
   `"stopped by user"`)
 - `"auto_state"`: the automation run (3.7).
+- `"jf_debug_log"`: `{ entries: [{t, site, src: "page"|"worker"|"bg", ev, tab?, pg?, ...a few small fields}] }`, oldest
+  first, the newest 1500 only (ring buffer). Written ONLY by background (batched: at most one write per 3 s); the
+  popup copies / clears it through `debugLogGet` / `debugLogClear` (3.5 "Debug log", 3.6).
 chrome.storage.session: `"li_partial_prompted"` (true after the keep/clear prompt was shown this browser session);
 `"auto_session"` (id of this browser session, 3.7); `"auto_boot"` (`{since}` while start-on-browser-open waits, 3.7);
 `"auto_starting"` (time autoStart began, while it checks the backend; the popup shows "Starting…" from it, 3.6 / 3.7).
@@ -483,6 +489,9 @@ chrome.storage.session: `"li_partial_prompted"` (true after the keep/clear promp
 | `dedupeClear` | popup | `{group: "naukri" \| "glassdoor_indeed"}` | backend `POST /dedupe/clear` → `{cleared}`, or `{error}` (other groups refused without a request; works with AI off) |
 | `autoStart` | popup | `{}` | `{ok}` once the run's window is open, or `{error}` ("the automation is already running", "<Site> is being scraped right now: stop it first", "no valid search links saved …", "backend not reachable — start it first" after asking /health for 2 min, "no internet connection", "cancelled" = Stop automation pressed meanwhile) (3.7) |
 | `autoStop` | popup | `{}` | `{ok}` (also when nothing runs) (3.7) |
+| `debugLog` | scrapers (scraper-core.js `jfsLog`), naukri-job.js | `{entry}` | `{ok}` — appended to `jf_debug_log` with `tab` = sender tab (senders never wait for it) |
+| `debugLogGet` | popup | `{}` | `{entries}` (pending events written first) |
+| `debugLogClear` | popup | `{}` | `{ok}` |
 Popup / automation → content (chrome.tabs.sendMessage): `{type:"scrapeStart", mode:"manual"|"automation"}` (missing =
 manual), `{type:"scrapeStop", reason?}`, `{type:"scrapeResume", onlyIfRunning?}` (`onlyIfRunning: true` = the
 automation re-attaching a run whose page reloaded, 3.7: never restarts a run that ended or is paused),
@@ -544,7 +553,9 @@ It only READS the DOM and sends messages to background.
   fetchJd(job): Promise<{jd, blocked}>,      // jd = full JD text ('' if unavailable); blocked = null, or the pause
                                              //   message when the job page was a rate limit / check page (403/429/503/challenge)
   nextPage(): Promise<"same-page"|"navigating"|"none">,   // load more on same page, or navigate to next URL
-  detectBlock(): string|null }               // captcha / login wall / cloudflare text ON THE RESULTS PAGE → pause reason
+  detectBlock(): string|null,                // captcha / login wall / cloudflare text ON THE RESULTS PAGE → pause reason
+  checkSearch?(state): {navigate}|{stop}|null,  // optional page guard (Naukri, below)
+  debugInfo?(): object }                     // optional extra fields for the "page.ready" debug-log event (Naukri: total)
 ```
 Engine loop (state persisted in `scrape_state` so it resumes after page navigation): wait for cards → for each new card:
 rules → hide; collect remaining → `screenTitle` in batches of ≤20 →
@@ -577,6 +588,24 @@ late once where a polling chain would crawl. A blocked job is never finished, hi
 or counted as an error; after a pause, Resume starts the waits from 30 s again and retries it. A captcha / login wall on
 the RESULTS page still pauses at once (`detectBlock`). Errors: 3 errors in a row (title / JD AI errors, unreadable JD;
 counted across all lanes in completion order) → pause; the first pause reason wins and the other lanes stop.
+
+**Debug log** (popup "Copy debug log", README "Sending a debug log"): every step goes to `jf_debug_log` (3.2) as a
+small event; strings are cut to 200 chars, never a whole JD. Page events (`src:"page"`, `pg` = id of that page load):
+`page.load` (+ the run seen in storage), `cmd` (scrapeStart / Stop / Resume received), `run.start` (mode, url, site
+settings), `run.loop`, `page.ready` (url, page, cards, tab title, Naukri `total`), `search.check` + `naukri.search`
+(saved vs current filters, totals, verdict), `rules` (counts + id / title / reason of each card the rules hid, cards
+the site hid), `title.send` / `title.reply` (ms, pass / reject / duplicate / missing / final / aiError counts, per job
+id: decision + short reason), `jd.queue` (jobs, lanes), `jd.start` / `jd.end` (job id, lane, ms, JD length,
+blocked), `naukri.jd` (the worker's error), `jd.verdict` (decision, stage, score, reason, ms), `save` (+ `savedNow`
+read back from the card) / `naukri.save` (no button / not confirmed), `job.skip`, `error`, `backoff.wait|join|over|
+giveUp`, `blocked`, `page.next` + `naukri.next` (result, the exact URL or why "none"), `handoff.written|taken|
+refused` (why), `run.pause|end|stop|resume|stoppedElsewhere|error|exit`, `retire`. Worker job page (`src:"worker"`):
+`wk.start`, `wk.finish` (ms, JD length, error, page title). Background (`src:"bg"`): `nk.queue`, `nk.window.new|
+gone|closed`, `nk.tab.new`, `nk.open` (tab, job, url), `nk.hello` (worker true / false + why), `nk.ready` (length,
+error, accepted), `nk.done` (ms, length, error incl. timeout), `nk.close`, `state` (scrape_state as stored, when more
+than the counts changed), `state.markStopped`, `backend.error`, `ext.installed|startup`. Logging is fire-and-forget
+and swallows every error (`jfsLog` takes the fields or a function returning them), so it can never change or stop a
+run. An orphaned page script (after an extension reload) can't log; it notes that in the tab's console.
 
 Notifications (background, `chrome.notifications`, one id `"jf-scrape"` so a new one replaces the last): when
 `scrape_state` of glassdoor / naukri / indeed becomes `paused` → "Job Filter: <Site> paused" + the reason; when `running`
@@ -644,6 +673,10 @@ Tabs: **Filters** (global blacklist/whitelist/companies textareas, comma separat
   settings; any new edit or a Save makes the next press warn again); three textareas `data-kind="lines"` (one link per line; links contain commas) for Naukri / Indeed /
   Glassdoor; checkboxes "Clear repost lists before every start" and "Start automatically when the browser opens (only if
   the backend is running)"; number "Wait for me to solve a captcha (minutes)" (1–120). Saved with the footer's Save.
+- Glassdoor, Naukri, Indeed and AI tabs: a **Debug log** box: "Copy debug log" (`debugLogGet`, falls back to reading
+  storage; copies valid JSON with one event per line, oldest first, each with a readable `time`, plus an `about`
+  header: version, browser, saved settings, current scrape_state; `navigator.clipboard.writeText`, fallback
+  `execCommand("copy")`; shows "copied N events") and "Clear log" (`debugLogClear`, falls back to removing the key).
 - AI tab: backend URL, AI on/off, backend health + provider/model (via `health` message), a note that the wanted roles
   (`target_role_families`), skills and years of experience are set in `backend/profile.yaml`, and the text
   "Results (jobs.xlsx + CSV files) are in AI-Based-Job-Filter/backend/output/<today>/".

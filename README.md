@@ -9,7 +9,8 @@ job card → your rules (instant, free) → AI on title + company → AI on full
 - **Glassdoor / Naukri / Indeed:** press **Start** and it goes through every page by itself. It hides bad jobs,
   marks every job it judged with the site's own **Save** button (so it's skipped next time), and writes good matches to
   `backend/output/<today>/jobs.xlsx` (title, company, match score 0-10, link; all sites, best first).
-  Reposts (same title + company again, under a new job id) are hidden without asking the AI.
+  Reposts (same title + company again, on Naukri also the same city + experience, under a new job id) are hidden
+  without asking the AI.
 - **Automation:** one button runs all your saved Naukri, Indeed and Glassdoor searches one after another in a window
   of its own, while you work on something else (section 4).
 - **Position first:** only the role types you want (AI/ML engineer, data scientist, data engineer by default) get
@@ -111,6 +112,8 @@ one isn't on any list.
 
 Naukri opens each shortlisted job in a **minimized background window** (Naukri doesn't allow reading the
 description any other way without its own page). Leave that window alone; it closes when the run ends.
+
+Something not working as expected? See "Sending a debug log" below.
 
 **LinkedIn**
 1. Extension icon → LinkedIn tab → **Open side panel** (once per window). Opera has no side panel for extensions
@@ -226,6 +229,23 @@ The flow (names are Power Automate Desktop actions; `<repo>` = `C:\Users\tarun\O
    Python process the venv starts; checked). If the backend ever stops before jobs.xlsx caught up, the next start
    catches it up; the CSV files always have every row.
 
+## Sending a debug log
+
+A scraper not doing what it should (stops early, skips pages, reads no descriptions, hides the wrong jobs, ...)?
+
+1. After pulling a new version and reloading the extension, also **reload the job-site tab** (an old page can't
+   write to the log).
+2. Extension icon → the Naukri, Indeed, Glassdoor or AI tab → **Clear log**, so the log holds only your next try.
+3. Run the scraper as usual until the problem shows.
+4. Extension icon → **Copy debug log** ("copied N events") → paste it into your message, or into a `.txt` file and
+   attach that.
+
+The log keeps the last 1500 steps of the Glassdoor / Naukri / Indeed scrapers and of Naukri's background window:
+pages loaded and cards found, Naukri's job count and search filters, what the rules hid and why, each AI verdict and
+its reason, each job page read (how long, how much text, errors / timeouts), save clicks, the exact "Next page"
+address, pauses, stops and why. The copy also holds your saved settings (keywords, saved searches). It never holds job
+descriptions, passwords or cookies, and LinkedIn is not logged. It stays in the browser until you paste it.
+
 ## Files
 
 ```
@@ -235,7 +255,7 @@ backend/
   questions.py    THE PROMPT: the questions the AI answers
   decide.py       plain-code decisions (wanted role types, experience comparison, scores, optional seniority words)
   experience.py   reads "3-8 Yrs", "2+ years", ... with regexes (the AI never does maths)
-  dedupe.py       repost detection: same title + company = same job
+  dedupe.py       repost detection: same title + company (+ city + experience on Naukri) = same job
   store.py        SQLite cache (a job is never sent to the AI twice) + repost lists + CSV writer, keeps jobs.xlsx up to date
   excel.py        builds jobs.xlsx from the day's CSVs
   automation.py   the automation-started / automation-finished files (for Power Automate)

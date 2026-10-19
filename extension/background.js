@@ -7,6 +7,8 @@
 //   4. Naukri worker window: a minimized window whose tabs open job pages so naukri-job.js can read the JD.
 //   5. Desktop notifications when a Glassdoor / Naukri / Indeed run pauses or finishes (never for LinkedIn).
 //   6. The automation (saved searches one after another) lives in automation.js, loaded below.
+//   7. The debug log (section 9): the last 1500 steps of the scrapers and the Naukri worker window, for the
+//      popup's "Copy debug log".
 //
 // Chrome kills an idle service worker at any time and starts it again on the next event, so global variables
 // can vanish. State that must survive (CSS injected per page, worker window id) is kept in chrome.storage.session.
@@ -32,6 +34,10 @@ const BADGE_COLOR = { pass: "#1a7f37", reject: "#cf222e", busy: "#6e7781" };
 const LI_CSS_KEY = "li_css_"; // storage.session "li_css_<tabId>" → {<documentId>: css} stylesheet in each page of that tab
 const LI_CSS_PAGES_KEPT = 6; // newest pages remembered per tab (about what Chrome's back/forward cache holds)
 const WORKER_WINDOW_KEY = "naukri_worker_window"; // storage.session → id of the minimized worker window
+const DEBUG_LOG_KEY = "jf_debug_log"; // storage.local → {entries: [...]}, oldest first (section 9)
+const DEBUG_LOG_MAX = 1500; // ring buffer: only the newest events are kept
+const DEBUG_LOG_WRITE_MS = 3000; // events are written in batches, at most one storage write per 3 s (the log can be ~300 KB)
+const DEBUG_TEXT_MAX = 200; // longer strings in an event are cut
 
 
 // ─── 1. Message router ──────────────────────────────────────────────────────────────────────────
@@ -51,6 +57,9 @@ const HANDLERS = {
   naukriJdReady: (msg, sender) => naukriJdReady(sender, msg),
   autoStart: () => autoStart({ waitForBackend: true }), // popup "Start automation" (automation.js)
   autoStop: () => autoStop(),
+  debugLog: (msg, sender) => addPageLogEntry(msg.entry, sender), // a scraper / worker page logs one step
+  debugLogGet: () => getDebugLog(), // popup "Copy debug log"
+  debugLogClear: () => clearDebugLog(), // popup "Clear log"
 };
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -109,12 +118,15 @@ async function callBackend(baseUrl, path, { method, body }, timeoutMs) {
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      return { error: "backend HTTP " + res.status + (text ? ": " + text.slice(0, 200) : "") };
+      const error = "backend HTTP " + res.status + (text ? ": " + text.slice(0, 200) : "");
+      bgLog("backend.error", { path, error });
+      return { error };
     }
     return await res.json();
   } catch (err) {
-    if (err && err.name === "AbortError") return { error: "timeout" };
-    return { error: "backend request failed (" + url + "): " + errorText(err) };
+    const error = err && err.name === "AbortError" ? "timeout" : "backend request failed (" + url + "): " + errorText(err);
+    bgLog("backend.error", { path, error, timeoutMs });
+    return { error };
   } finally {
     clearTimeout(timer);
   }
@@ -257,6 +269,7 @@ async function markScrapeStopped(onlyTabId, reason) {
   const { scrape_state: state } = await chrome.storage.local.get("scrape_state");
   if (!state || !state.running) return;
   if (onlyTabId != null && state.tabId !== onlyTabId) return;
+  bgLog("state.markStopped", { reason, tab: state.tabId }, state.site);
   await chrome.storage.local.set({ scrape_state: { ...state, running: false, paused: false, pauseReason: reason } });
 }
 
@@ -326,9 +339,13 @@ const naukriBusy = new Map(); // tabId → {jobId, pageKey, resolve, timer} for 
 let naukriPumping = false;
 
 function naukriFetchJd(url, jobId) {
-  if (typeof url !== "string" || !url.startsWith("https://www.naukri.com/")) return { error: "bad_url" };
+  if (typeof url !== "string" || !url.startsWith("https://www.naukri.com/")) {
+    bgLog("nk.badUrl", { job: String(jobId), url: String(url) }, "naukri");
+    return { error: "bad_url" };
+  }
   return new Promise((resolve) => {
     naukriQueue.push({ url, jobId: String(jobId), resolve });
+    bgLog("nk.queue", { job: String(jobId), queued: naukriQueue.length, busyTabs: naukriBusy.size }, "naukri");
     pumpNaukriQueue();
   });
 }
@@ -348,6 +365,7 @@ async function pumpNaukriQueue() {
       try {
         startNaukriJob(await getFreeWorkerTab(), job);
       } catch (err) {
+        bgLog("nk.error", { job: job.jobId, error: "worker window: " + errorText(err) }, "naukri");
         job.resolve({ error: "worker window: " + errorText(err) });
       }
     }
@@ -359,7 +377,9 @@ async function pumpNaukriQueue() {
 // Register the job BEFORE navigating, so the page's naukriWorkerHello always finds it.
 function startNaukriJob(tabId, job) {
   const timer = setTimeout(() => settleNaukriJob(tabId, { error: "timeout" }), NAUKRI_JOB_TIMEOUT_MS);
-  naukriBusy.set(tabId, { jobId: job.jobId, pageKey: naukriPageKey(job.url), resolve: job.resolve, timer });
+  // startedAt: debug log only (how long the page took)
+  naukriBusy.set(tabId, { jobId: job.jobId, pageKey: naukriPageKey(job.url), resolve: job.resolve, timer, startedAt: Date.now() });
+  bgLog("nk.open", { tab: tabId, job: job.jobId, url: job.url, stillQueued: naukriQueue.length }, "naukri");
   chrome.tabs.update(tabId, { url: job.url })
     .catch((err) => settleNaukriJob(tabId, { error: "could not open job page: " + errorText(err) }));
 }
@@ -370,6 +390,13 @@ function finishNaukriJob(tabId, result) {
   if (!entry) return false;
   clearTimeout(entry.timer);
   naukriBusy.delete(tabId);
+  bgLog("nk.done", {
+    tab: tabId,
+    job: entry.jobId,
+    ms: Date.now() - entry.startedAt,
+    len: typeof result.jd === "string" ? result.jd.length : 0,
+    error: result.error || null,
+  }, "naukri");
   entry.resolve(result);
   return true;
 }
@@ -386,6 +413,7 @@ async function getFreeWorkerTab() {
   const free = (win.tabs || []).find((tab) => !naukriBusy.has(tab.id));
   if (free) return free.id;
   const tab = await chrome.tabs.create({ windowId: win.id, url: "about:blank", active: false });
+  bgLog("nk.tab.new", { tab: tab.id, window: win.id }, "naukri");
   return tab.id;
 }
 
@@ -397,9 +425,11 @@ async function ensureWorkerWindow() {
       return await chrome.windows.get(windowId, { populate: true });
     } catch (_) {
       // Closed by the user: make a new one below.
+      bgLog("nk.window.gone", { window: windowId }, "naukri");
     }
   }
   const created = await chrome.windows.create({ url: "about:blank", focused: false, state: "minimized" });
+  bgLog("nk.window.new", { window: created.id }, "naukri");
   await chrome.storage.session.set({ [WORKER_WINDOW_KEY]: created.id });
   return chrome.windows.get(created.id, { populate: true });
 }
@@ -428,11 +458,24 @@ function naukriJobFor(sender) {
 // naukri-job.js asks on load: "was I opened by the scraper?" Only worker tabs get a jobId.
 function naukriWorkerHello(sender) {
   const entry = naukriJobFor(sender);
+  bgLog("nk.hello", { tab: sender.tab ? sender.tab.id : null, worker: !!entry, job: entry ? entry.jobId : null,
+    url: sender.url, why: entry ? null : naukriNotWorkerWhy(sender) }, "naukri");
   return entry ? { worker: true, jobId: entry.jobId } : { worker: false };
+}
+
+// Debug log only: why a job page's hello got {worker: false}.
+function naukriNotWorkerWhy(sender) {
+  const busy = sender.tab ? naukriBusy.get(sender.tab.id) : null;
+  if (!busy) return "this tab waits for no job (opened by you, or its job already ended: timeout / stop)";
+  return "this page is job " + naukriPageKey(sender.url) + " but the tab waits for job " + busy.pageKey;
 }
 
 function naukriJdReady(sender, msg) {
   const entry = naukriJobFor(sender);
+  const accepted = !!entry && String(msg.jobId) === entry.jobId;
+  bgLog("nk.ready", { tab: sender.tab ? sender.tab.id : null, job: String(msg.jobId), len: typeof msg.jd === "string" ? msg.jd.length : 0,
+    error: msg.error || null, accepted,
+    why: accepted ? null : !entry ? "late: this tab no longer waits for this page" : "the tab now waits for job " + entry.jobId }, "naukri");
   // Ignore late answers for a job we already gave up on (timeout) or that belong to an older job in this tab.
   if (!entry || String(msg.jobId) !== entry.jobId) return { ok: false };
 
@@ -447,6 +490,7 @@ function naukriJdReady(sender, msg) {
 
 // Scraping stopped: answer everything still waiting, then close the worker window.
 async function closeNaukriWorker(reason) {
+  bgLog("nk.close", { reason, queued: naukriQueue.length, busyTabs: naukriBusy.size }, "naukri");
   for (const job of naukriQueue.splice(0)) job.resolve({ error: reason });
   for (const tabId of [...naukriBusy.keys()]) finishNaukriJob(tabId, { error: reason });
 
@@ -482,7 +526,10 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 chrome.windows.onRemoved.addListener(async (windowId) => {
   try {
     const stored = (await chrome.storage.session.get(WORKER_WINDOW_KEY))[WORKER_WINDOW_KEY];
-    if (stored === windowId) await chrome.storage.session.remove(WORKER_WINDOW_KEY);
+    if (stored === windowId) {
+      bgLog("nk.window.closed", { window: windowId }, "naukri");
+      await chrome.storage.session.remove(WORKER_WINDOW_KEY);
+    }
   } catch (err) {
     logError("worker window closed")(err);
   }
@@ -494,6 +541,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !changes.scrape_state) return;
   const before = changes.scrape_state.oldValue;
   const after = changes.scrape_state.newValue;
+  logScrapeStateChange(before, after);
   notifyScrapeChange(before, after).catch(logError("notify"));
   if (before && before.running && !(after && after.running)) {
     closeNaukriWorker("stopped").catch(logError("close worker window"));
@@ -508,12 +556,14 @@ if (chrome.notifications) {
 
 // After a browser restart nothing can still be scraping (tab ids changed too).
 chrome.runtime.onStartup.addListener(() => {
+  bgLog("ext.startup", { version: chrome.runtime.getManifest().version });
   markScrapeStopped(null, "browser restarted").catch(logError("onStartup"));
 });
 
 // Nor after the extension was reloaded / updated: the scraping page's script can no longer reach us, and a run
 // left "running" would keep the popup's Start and "Start automation" off.
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
+  bgLog("ext.installed", { reason: details && details.reason, version: chrome.runtime.getManifest().version });
   markScrapeStopped(null, "extension reloaded").catch(logError("onInstalled"));
 });
 
@@ -541,4 +591,113 @@ function errorText(err) {
 
 function logError(where) {
   return (err) => console.warn("[JobFilter] " + where + ":", err);
+}
+
+
+// ─── 9. Debug log (popup "Copy debug log", README "Sending a debug log") ────────────────────────
+//
+// The scrapers (scraper-core.js jfsLog), naukri-job.js and this file log each step as a small event
+// {t, site, src: "page" | "worker" | "bg", ev, ...a few fields}. Kept in storage.local "jf_debug_log" (the newest
+// 1500). Events are collected in memory and written in one batch at most every 3 s, so a busy run costs a couple
+// of storage writes per second. Logging never throws and never makes a scraper wait: a lost line is fine.
+
+let debugEntries = null; // the stored log, loaded once per service-worker life (oldest first)
+let debugPending = []; // events not written yet
+let debugTimer = null; // the next batch write, while one is scheduled
+let debugWrite = Promise.resolve(); // writes run one after another
+
+// An event from a scraper / worker page; the background adds the tab it came from.
+function addPageLogEntry(entry, sender) {
+  if (!entry || typeof entry !== "object") return { ok: false };
+  debugAdd(Object.assign(debugClean(entry), { tab: sender && sender.tab ? sender.tab.id : null }));
+  return { ok: true };
+}
+
+// The background's own event (Naukri worker window, backend errors, scrape_state changes).
+function bgLog(ev, data, site = null) {
+  try {
+    debugAdd(Object.assign({ t: Date.now(), site, src: "bg", ev }, debugClean(data)));
+  } catch (_) {
+    // the debug log must never break real work
+  }
+}
+
+function debugAdd(entry) {
+  try {
+    debugPending.push(entry);
+    if (debugPending.length > DEBUG_LOG_MAX) debugPending.shift();
+    if (!debugTimer) {
+      debugTimer = setTimeout(() => {
+        debugTimer = null;
+        flushDebugLog();
+      }, DEBUG_LOG_WRITE_MS);
+    }
+  } catch (_) {
+    // the debug log must never break real work
+  }
+}
+
+async function loadDebugEntries() {
+  if (!debugEntries) {
+    const stored = (await chrome.storage.local.get(DEBUG_LOG_KEY))[DEBUG_LOG_KEY];
+    debugEntries = stored && Array.isArray(stored.entries) ? stored.entries : [];
+  }
+  return debugEntries;
+}
+
+// Appends the waiting events and keeps the newest 1500. A failed write only loses debug lines.
+function flushDebugLog() {
+  debugWrite = debugWrite
+    .then(async () => {
+      if (!debugPending.length) return;
+      const entries = (await loadDebugEntries()).concat(debugPending.splice(0)).slice(-DEBUG_LOG_MAX);
+      debugEntries = entries;
+      await chrome.storage.local.set({ [DEBUG_LOG_KEY]: { entries } });
+    })
+    .catch(() => {});
+  return debugWrite;
+}
+
+// Popup "Copy debug log": everything, including the events of the last half second.
+async function getDebugLog() {
+  await flushDebugLog();
+  return { entries: await loadDebugEntries() };
+}
+
+// Popup "Clear log": waits for a write in progress, then empties the log.
+function clearDebugLog() {
+  debugPending = [];
+  const cleared = debugWrite.then(() => {
+    debugEntries = [];
+    return chrome.storage.local.remove(DEBUG_LOG_KEY);
+  });
+  debugWrite = cleared.catch(() => {});
+  return cleared.then(() => ({ ok: true }));
+}
+
+// A small copy for the log: strings cut to 200 chars, lists to 25 items, 4 levels deep (no full JDs, ever).
+// Page events were already cut by the page; this also guards against an oversized one.
+function debugClean(value, depth = 0) {
+  if (typeof value === "string") return value.length > DEBUG_TEXT_MAX ? value.slice(0, DEBUG_TEXT_MAX) + "…" : value;
+  if (value === null || typeof value !== "object") return value;
+  if (depth >= 4) return "[…]";
+  if (Array.isArray(value)) return value.slice(0, 25).map((item) => debugClean(item, depth + 1));
+  const copy = {};
+  for (const key of Object.keys(value)) copy[key] = debugClean(value[key], depth + 1);
+  return copy;
+}
+
+// The scrape_state as storage sees it, logged when more than the counts changed (start, page, hand-off, pause, end).
+function logScrapeStateChange(before, after) {
+  try {
+    const pick = (s) => s && {
+      running: s.running, paused: s.paused, mode: s.mode, tab: s.tabId, page: s.page, pagesDone: s.pagesDone,
+      reason: s.pauseReason, wait: s.waitReason, handoff: !!s.handoffAt, startedAt: s.startedAt,
+    };
+    const now = pick(after);
+    if (JSON.stringify(pick(before)) === JSON.stringify(now)) return; // only the counts moved
+    bgLog("state", Object.assign({}, now, { counts: after && after.counts }), after && after.site);
+  } catch (_) {
+    // the debug log must never break real work
+  }
 }

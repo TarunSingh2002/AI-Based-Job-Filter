@@ -1,6 +1,6 @@
 """
-Reposts: companies post the same job again and again (new job id, same title, same company).
-Each site group screens a (title, company) once; later copies are hidden as "repost of <site> <job_id>"
+Reposts: companies post the same job again and again (new job id, same title, company, city and experience).
+Each site group screens such a job once (repost_key); later copies are hidden as "repost of <site> <job_id>"
 without asking the AI (app.py), so they cost nothing and add no CSV row.
 
     naukri               -> its own list
@@ -26,13 +26,19 @@ def dedupe_group(site: str) -> str | None:
     return DEDUPE_GROUPS.get(site)
 
 
-def repost_key(title: str, company: str) -> str | None:
-    """"Data Scientist" + "Acme Technologies Pvt. Ltd." -> "data scientist|acme".
+def repost_key(title: str, company: str, location: str = "", experience: str = "") -> str | None:
+    """"Data Scientist" + "Acme Technologies Pvt. Ltd." + "Pune" + "2-5 Yrs" -> "data scientist|acme|pune|2 5 yrs".
+    City and experience are part of the key: the same role in another city or for another experience range is a
+    different opening and gets judged, while a real repost (same city, same range) is still caught. A card without
+    both (Indeed and Glassdoor show no experience) keeps the plain "title|company" key.
     None when the title or company is missing: "title|" would make every company-less card a repost."""
     title_part = _normalize(title)
     company_part = company_name(company)
     if not title_part or not company_part:
         return None
+    location_part, experience_part = _normalize(location), _normalize(experience)
+    if location_part and experience_part:
+        return f"{title_part}|{company_part}|{location_part}|{experience_part}"
     return f"{title_part}|{company_part}"
 
 

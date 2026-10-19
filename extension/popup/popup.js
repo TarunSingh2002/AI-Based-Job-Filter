@@ -2,7 +2,8 @@
 // Edits chrome.storage.local "settings" (content scripts pick changes up via chrome.storage.onChanged),
 // starts / stops / resumes the Glassdoor, Naukri and Indeed scrapers, starts / stops the automation (it runs in
 // the background: automation.js) and shows its progress from storage "auto_state", clears the backend's repost
-// lists, and checks the backend. Uses jfLoadSettings / jfMergeSettings from ../common/filters.js.
+// lists, checks the backend, and copies / clears the debug log. Uses jfLoadSettings / jfMergeSettings from
+// ../common/filters.js.
 
 const SITE_LABEL = { glassdoor: "Glassdoor", naukri: "Naukri", indeed: "Indeed", linkedin: "LinkedIn" };
 const AUTO_STATUS_TEXT = {
@@ -12,6 +13,7 @@ const AUTO_STATUS_TEXT = {
 // automation.js keeps "Start is checking the backend" in storage.session "auto_starting" (its start time), so a
 // popup opened again meanwhile still shows "Starting…" and offers Stop. Older = left by a stopped service worker.
 const AUTO_STARTING_MAX_MS = 3 * 60000;
+const DEBUG_LOG_KEY = "jf_debug_log"; // storage.local, written by background.js (section 9)
 
 // Start is only offered on a search-results page: that is the only page the scraper knows how to read.
 const SEARCH_PAGE_TESTS = {
@@ -36,6 +38,7 @@ async function init() {
   activeTab = await getActiveTab();
   settings = await jfLoadSettings();
   buildScrapeBoxes();
+  buildDebugBoxes();
   fillForm(settings);
   wireEvents();
 
@@ -69,6 +72,9 @@ function wireEvents() {
   }
   for (const btn of document.querySelectorAll("[data-dedupe]")) {
     btn.addEventListener("click", safely(() => clearRepostList(btn)));
+  }
+  for (const btn of document.querySelectorAll("[data-debug]")) {
+    btn.addEventListener("click", safely(() => onDebugButton(btn)));
   }
   $("save").addEventListener("click", safely(saveSettings));
   $("clearPartial").addEventListener("click", safely(clearPartialList));
@@ -498,6 +504,99 @@ async function checkHealth() {
   box.className = "health ok";
   box.textContent = "Connected · " + reply.provider + " · " + reply.model
     + (years != null ? " · profile: " + years + " yrs" : "");
+}
+
+
+// ─── Debug log (Glassdoor / Naukri / Indeed / AI tabs) ──────────────────────────────────────────
+// The scrapers and background.js log every step (storage "jf_debug_log", the newest 1500 events). "Copy debug log"
+// puts it on the clipboard to paste into a bug report; "Clear log" empties it for a clean try.
+
+function buildDebugBoxes() {
+  const template = $("debugTemplate");
+  for (const box of document.querySelectorAll(".debug")) box.appendChild(template.content.cloneNode(true));
+}
+
+async function onDebugButton(button) {
+  const status = button.closest(".debug").querySelector('[data-role="debugStatus"]');
+  status.textContent = "";
+  button.disabled = true;
+  try {
+    if (button.dataset.debug === "clear") {
+      await clearDebugLog();
+      status.textContent = "Log cleared.";
+      return;
+    }
+    const entries = await readDebugLog();
+    const text = debugLogText(entries);
+    await copyText(text);
+    status.textContent = "copied " + entries.length + " events (" + Math.ceil(text.length / 1024)
+      + " KB). Paste it into your message.";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// From the background (it adds the events of the last half second first); straight from storage if it can't answer.
+async function readDebugLog() {
+  try {
+    const reply = await chrome.runtime.sendMessage({ type: "debugLogGet" });
+    if (reply && Array.isArray(reply.entries)) return reply.entries.filter((e) => e && typeof e === "object");
+  } catch (_) {
+    // background not reachable: read what it stored
+  }
+  const stored = (await chrome.storage.local.get(DEBUG_LOG_KEY))[DEBUG_LOG_KEY];
+  return stored && Array.isArray(stored.entries) ? stored.entries.filter((e) => e && typeof e === "object") : [];
+}
+
+async function clearDebugLog() {
+  let reply;
+  try {
+    reply = await chrome.runtime.sendMessage({ type: "debugLogClear" });
+  } catch (err) {
+    reply = { error: errorText(err) };
+  }
+  if (!reply || reply.error) await chrome.storage.local.remove(DEBUG_LOG_KEY); // background not reachable
+}
+
+// Valid JSON, one event per line (short to paste, easy to read), oldest first. "about" adds the extension version,
+// the browser, the saved settings and the current run, which explain most events.
+function debugLogText(entries) {
+  const about = {
+    exportedAt: new Date().toISOString(),
+    version: chrome.runtime.getManifest().version,
+    browser: navigator.userAgent,
+    events: entries.length,
+    scrape_state: scrapeState,
+    settings,
+  };
+  const lines = entries
+    .slice()
+    .sort((a, b) => (a.t || 0) - (b.t || 0))
+    .map((entry) => "    " + JSON.stringify(Object.assign({ time: clockTime(entry.t) }, entry)));
+  return '{\n  "about": ' + JSON.stringify(about) + ',\n  "entries": [\n' + lines.join(",\n") + "\n  ]\n}\n";
+}
+
+// 21:04:05.123 (local time of an event, so the log reads like a timeline)
+function clockTime(ms) {
+  if (typeof ms !== "number") return null;
+  const d = new Date(ms);
+  const pad = (n, width) => String(n).padStart(width, "0");
+  return pad(d.getHours(), 2) + ":" + pad(d.getMinutes(), 2) + ":" + pad(d.getSeconds(), 2) + "." + pad(d.getMilliseconds(), 3);
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (err) {
+    // The clipboard API said no (e.g. the popup lost focus): the older way, through a hidden text box.
+    const box = document.createElement("textarea");
+    box.value = text;
+    document.body.appendChild(box);
+    box.select();
+    const copied = document.execCommand("copy");
+    box.remove();
+    if (!copied) throw new Error("Could not copy the debug log: " + errorText(err));
+  }
 }
 
 

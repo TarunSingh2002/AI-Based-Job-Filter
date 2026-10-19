@@ -99,6 +99,7 @@
         <button type="button" class="small danger" data-dedupe="glassdoor_indeed">Clear repost list</button>
       </fieldset>
       <p class="hint">"Save processed" clicks the site's own Save button, so "hide saved" skips those jobs next time.</p>
+      <div class="debug"></div>
     </section>
 
     <section class="panel" id="tab-naukri" hidden>
@@ -119,11 +120,13 @@
       </fieldset>
       <fieldset>
         <legend>Reposts</legend>
-        <p class="hint">A job reposted under the same title + company is judged once; its copies are hidden.</p>
+        <p class="hint">A job reposted under the same title, company, city and experience is judged once; its copies
+          are hidden.</p>
         <button type="button" class="small danger" data-dedupe="naukri">Clear repost list</button>
       </fieldset>
       <p class="hint">Naukri descriptions are read from the real job pages in a minimized window, which closes when
         scraping stops.</p>
+      <div class="debug"></div>
     </section>
 
     <section class="panel" id="tab-indeed" hidden>
@@ -147,6 +150,7 @@
           Glassdoor and Indeed share this list.</p>
         <button type="button" class="small danger" data-dedupe="glassdoor_indeed">Clear repost list</button>
       </fieldset>
+      <div class="debug"></div>
     </section>
 
     <section class="panel" id="tab-automation" hidden>
@@ -210,6 +214,7 @@
         engineering), your skills and your years of experience are set in <code>backend/profile.yaml</code>.
         Restart the backend after editing it.</p>
       <p class="hint" id="csvHint"></p>
+      <div class="debug"></div>
     </section>
   </main>
 
@@ -236,6 +241,20 @@
       <button type="button" data-action="resume">Resume</button>
     </div>
     <p class="hint" data-role="hint"></p>
+  </template>
+
+  <!-- Filled into every .debug box (Glassdoor, Naukri, Indeed and AI tabs) by popup.js. -->
+  <template id="debugTemplate">
+    <fieldset>
+      <legend>Debug log</legend>
+      <p class="hint">Something not working as expected? Copy the log of the last steps (no job descriptions) and
+        send it. Clear it before a new try for a short log of just that try.</p>
+      <div class="row">
+        <button type="button" class="small" data-debug="copy">Copy debug log</button>
+        <button type="button" class="small danger" data-debug="clear">Clear log</button>
+      </div>
+      <p class="hint" data-role="debugStatus"></p>
+    </fieldset>
   </template>
 
   <script src="../common/filters.js"></script>

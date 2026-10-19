@@ -19,6 +19,9 @@
 // Long waits are ONE timer that Stop / Pause wake early (nap), not a chain of short polls: the browser slows the
 // timers of a window that is covered or minimized, and a chain of short timers then crawls.
 //
+// Debug log: every step of a run also goes to the background's debug log (jfsLog; popup "Copy debug log",
+// README "Sending a debug log"). It is fire-and-forget, so it can never slow down or break a run.
+//
 // How a run survives "Next page" navigation:
 //   the run lives in chrome.storage.local "scrape_state". A content script cannot know its own tab id
 //   (the background stamps `tabId` from the sender on every save; the popup and the tab-closed cleanup use it),
@@ -111,6 +114,83 @@ function jfsSendError(message) {
   if (!jfsOrphaned() && !/context invalidated/i.test(message)) return { error: message };
   if (typeof JFScraper !== 'undefined') JFScraper.retire();
   return { error: message, orphaned: true };
+}
+
+// ------------------------------------------------------------------ debug log
+
+const JFS_LOG_TEXT_MAX = 200; // longer strings are cut: the log holds steps, never whole job descriptions
+const JFS_PAGE_ID = Math.random().toString(36).slice(2, 6); // tells the events of two page loads apart
+
+/**
+ * Adds one event to the debug log the background keeps (the last 1500; DESIGN 3.5). `data` = a few small fields,
+ * or a function returning them (for fields that need a DOM read: any error in it is swallowed here too).
+ * Fire-and-forget and never throws: logging must never slow down or break the scraper.
+ */
+function jfsLog(ev, data) {
+  try {
+    if (jfsOrphaned()) return; // the extension was reloaded: there is no log to write to any more
+    const fields = typeof data === 'function' ? data() : data;
+    const site = typeof JFScraper !== 'undefined' && JFScraper.adapter ? JFScraper.adapter.site : null;
+    const entry = Object.assign({ t: Date.now(), site, src: 'page', pg: JFS_PAGE_ID, ev }, jfsLogValue(fields));
+    chrome.runtime.sendMessage({ type: 'debugLog', entry }, () => void chrome.runtime.lastError);
+  } catch (e) {
+    // a lost log line is fine; a broken run is not
+  }
+}
+
+/** A small copy of a value for the log: strings cut to 200 chars, lists to 25 items, 3 levels deep. */
+function jfsLogValue(value, depth = 0) {
+  if (typeof value === 'string') return value.length > JFS_LOG_TEXT_MAX ? value.slice(0, JFS_LOG_TEXT_MAX) + '…' : value;
+  if (value === null || typeof value !== 'object') return value;
+  if (depth >= 3) return '[…]';
+  if (Array.isArray(value)) return value.slice(0, 25).map((item) => jfsLogValue(item, depth + 1));
+  const copy = {};
+  for (const key of Object.keys(value)) copy[key] = jfsLogValue(value[key], depth + 1);
+  return copy;
+}
+
+/** First n characters of a text (for titles / reasons in the log). */
+function jfsCut(text, n) {
+  return text == null ? text : String(text).slice(0, n);
+}
+
+/** The parts of a scrape_state that explain what a run is doing (for the log). */
+function jfsRunSummary(state) {
+  if (!state) return null;
+  return {
+    running: state.running,
+    paused: state.paused,
+    site: state.site,
+    mode: state.mode,
+    host: state.pageKey,
+    page: state.page,
+    pagesDone: state.pagesDone,
+    reason: state.pauseReason,
+    handoffAgeMs: state.handoffAt ? Date.now() - state.handoffAt : null,
+    startedAt: state.startedAt,
+  };
+}
+
+/** The title AI's answer for one batch, per job and in counts (for the log). */
+function jfsTitleReplyLog(items, reply, ms) {
+  if (reply.error || !Array.isArray(reply.results)) return { ms, error: reply.error || 'unexpected reply' };
+  const byId = new Map(reply.results.map((r) => [String(r.job_id), r]));
+  const counts = { pass: 0, reject: 0, duplicate: 0, missing: 0, final: 0, aiError: 0 };
+  const jobs = items.map((item) => {
+    const r = byId.get(String(item.job.job_id));
+    const decision = !r ? 'missing' : r.duplicate === true ? 'duplicate' : r.decision === 'reject' ? 'reject' : 'pass';
+    counts[decision] += 1;
+    if (r && r.final && decision !== 'duplicate') counts.final += 1; // judged before: no JD needed
+    if (r && /^ai_error/.test(r.reason || '')) counts.aiError += 1;
+    return {
+      id: item.job.job_id,
+      title: jfsCut(item.job.title, 60),
+      decision,
+      final: r ? !!r.final : undefined,
+      reason: r ? jfsCut(r.reason, 80) : undefined,
+    };
+  });
+  return Object.assign({ ms }, counts, { jobs });
 }
 
 /** Visible text of an element, whitespace collapsed ('' when the element is missing). */
@@ -310,6 +390,9 @@ const JFScraper = {
     chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       const action = msg && actions[msg.type];
       if (!action) return false;
+      if (msg.type !== 'scrapeStatus') {
+        jfsLog('cmd', { type: msg.type, mode: msg.mode, reason: msg.reason, onlyIfRunning: msg.onlyIfRunning, url: location.href });
+      }
       action(msg).then(sendResponse, (e) => sendResponse({ error: String((e && e.message) || e) }));
       return true; // the reply is sent asynchronously
     });
@@ -319,6 +402,7 @@ const JFScraper = {
       const next = area === 'local' && changes.scrape_state && changes.scrape_state.newValue;
       const stoppedElsewhere = next && (next.running === false || next.paused === true);
       if (stoppedElsewhere && this.isBusy() && next.startedAt === this.state.startedAt) {
+        jfsLog('run.stoppedElsewhere', { running: next.running, paused: next.paused, reason: next.pauseReason });
         this.cancelLoops();
         this.state = next;
       }
@@ -372,12 +456,29 @@ const JFScraper = {
   /** On page load: take over the run that the previous page just handed over ("Next page" navigation). */
   async resumeIfRunning(adapter) {
     this.adapter = adapter;
-    if (!this.isOurRun(await this.loadState())) return; // a paused run waits for the user's Resume
+    const first = await this.loadState();
+    jfsLog('page.load', { url: location.href, ours: this.isOurRun(first), run: jfsRunSummary(first) });
+    if (!this.isOurRun(first)) return; // a paused run waits for the user's Resume
     const hasCards = await jfsWaitFor(() => adapter.findCards().length > 0, 15000, 500);
     // Read again after the wait: by now the old page's hand-off has surely reached storage.
     const state = await this.loadState();
     const handedOver = this.isOurRun(state) && !!state.handoffAt && Date.now() - state.handoffAt < JFS_HANDOFF_MS;
-    if (!handedOver || this.isBusy()) return; // not navigated here by the run: leave it alone
+    if (!handedOver || this.isBusy()) {
+      // not navigated here by the run: leave it alone (the log says why)
+      jfsLog('handoff.refused', () => ({
+        why: !this.isOurRun(state)
+          ? 'the run ended, paused or moved on meanwhile'
+          : !state.handoffAt
+            ? 'no hand-off: the run did not open this page'
+            : !handedOver
+              ? `hand-off too old (${Math.round((Date.now() - state.handoffAt) / 1000)} s)`
+              : 'this page already runs it',
+        cards: hasCards,
+        run: jfsRunSummary(state),
+      }));
+      return;
+    }
+    jfsLog('handoff.taken', { page: state.page, cards: hasCards, handoffAgeMs: Date.now() - state.handoffAt });
     this.state = state;
     this.state.handoffAt = null; // taken: no other page may pick it up now
     if (!hasCards) {
@@ -400,7 +501,10 @@ const JFScraper = {
 
   /** mode "automation" = started by the background's automation, else "manual" (recorded only; same pace). */
   async start(mode) {
-    if (this.isBusy()) return this.state; // already running on this page
+    if (this.isBusy()) {
+      jfsLog('run.start.ignored', { why: 'already running on this page' });
+      return this.state; // already running on this page
+    }
     const settings = await jfLoadSettings();
     const siteSettings = settings[this.adapter.site] || {};
     this.state = {
@@ -426,6 +530,20 @@ const JFScraper = {
       searchFixedPage: null, // the page already reloaded once to restore lost filters (no reload loops)
     };
     this.done.clear();
+    jfsLog('run.start', {
+      mode: this.state.mode,
+      url: location.href,
+      startedAt: this.state.startedAt,
+      settings: {
+        aiEnabled: settings.aiEnabled,
+        maxPages: siteSettings.maxPages,
+        jdTabs: siteSettings.jdTabs,
+        jdParallel: siteSettings.jdParallel,
+        markProcessed: siteSettings.markProcessed,
+        hideSaved: siteSettings.hideSaved,
+        hidePromoted: siteSettings.hidePromoted,
+      },
+    });
     await this.save();
     this.run(); // not awaited: the popup gets its reply right away
     return this.state;
@@ -433,6 +551,7 @@ const JFScraper = {
 
   /** reason: why it ended (the popup shows it); the automation passes its own, a popup Stop is "stopped by user". */
   async stop(reason) {
+    jfsLog('run.stop', { reason: reason || 'stopped by user', runningHere: this.isBusy() });
     const state = this.isBusy() ? this.state : await this.loadState();
     this.cancelLoops(); // the running loop (if any) exits at its next check
     if (!state) return null;
@@ -448,10 +567,20 @@ const JFScraper = {
    * but lost its page; never restart one that ended meanwhile or one that is paused (that waits for your Resume).
    */
   async resume(onlyIfRunning = false) {
-    if (this.isBusy()) return this.state;
+    if (this.isBusy()) {
+      jfsLog('run.resume', { onlyIfRunning, result: 'already running on this page' });
+      return this.state;
+    }
     const state = await this.loadState();
-    if (!state || state.site !== this.adapter.site) return state; // nothing of this site to resume
-    if (onlyIfRunning && !(state.running && !state.paused)) return state;
+    if (!state || state.site !== this.adapter.site) {
+      jfsLog('run.resume', { onlyIfRunning, result: 'nothing of this site to resume', run: jfsRunSummary(state) });
+      return state; // nothing of this site to resume
+    }
+    if (onlyIfRunning && !(state.running && !state.paused)) {
+      jfsLog('run.resume', { onlyIfRunning, result: 'not taken: the run ended or is paused', run: jfsRunSummary(state) });
+      return state;
+    }
+    jfsLog('run.resume', { onlyIfRunning, result: 'resumed', url: location.href, before: jfsRunSummary(state) });
     Object.assign(state, { running: true, paused: false, pauseReason: null, pageKey: location.host, handoffAt: null });
     this.state = state;
     await this.save();
@@ -473,23 +602,44 @@ const JFScraper = {
     this.blockLevel = 0; // a Resume starts the rate-limit waits from 30 s again
     this.lastBlockAt = 0;
     Object.assign(this.state, { waitReason: null, waitUntil: null });
+    jfsLog('run.loop', { token, page: this.state.page, pagesDone: this.state.pagesDone, maxPages: this.state.maxPages });
     try {
       while (this.alive(token)) {
         const hasCards = await jfsWaitFor(() => this.adapter.findCards().length > 0, 15000, 500);
         if (!(await this.canContinue(token))) return;
         if (!hasCards) {
+          jfsLog('page.noCards', { url: location.href, title: document.title, waitedMs: 15000 });
           await this.end('no job cards found on this page');
           return;
         }
         await jfsSleep(800); // let the list finish rendering
         const settings = await jfLoadSettings(); // re-read per page so popup changes apply mid-run
         if (!this.alive(token)) return;
+        jfsLog('page.ready', () =>
+          Object.assign(
+            {
+              url: location.href,
+              page: this.state.page,
+              pagesDone: this.state.pagesDone,
+              cards: this.adapter.findCards().length,
+              title: document.title,
+            },
+            this.adapter.debugInfo ? this.adapter.debugInfo() : null // Naukri: the total job count from the title
+          )
+        );
 
         // The site's own sanity check of this page (Naukri: the search filters are still applied and the result
         // count didn't explode). Losing the filters once turned 145 jobs into 11,786 — never scrape that.
         const check = this.adapter.checkSearch ? this.adapter.checkSearch(this.state) : null;
+        jfsLog('search.check', () => ({
+          page: this.state.page,
+          result: !this.adapter.checkSearch ? 'no check' : !check ? 'ok' : check.navigate ? 'reload' : check.stop ? 'stop' : 'ok',
+          navigate: check ? check.navigate : undefined,
+          stop: check ? check.stop : undefined,
+        }));
         if (check && check.navigate) {
           this.state.handoffAt = Date.now(); // the reloaded page takes the run over (resumeIfRunning)
+          jfsLog('handoff.written', { page: this.state.page, why: 'reload with the saved filters', url: check.navigate });
           await this.save();
           location.replace(check.navigate);
           return;
@@ -513,6 +663,7 @@ const JFScraper = {
 
         this.state.pagesDone += 1;
         const result = await this.adapter.nextPage();
+        jfsLog('page.next', { result, page: this.state.page, pagesDone: this.state.pagesDone });
         if (!this.alive(token)) return; // Stop came while Glassdoor was loading more jobs
         if (result === 'none') {
           await this.end('no more pages');
@@ -523,6 +674,7 @@ const JFScraper = {
           // Hand the run to the next page (resumeIfRunning). save() sends its message right away,
           // before this page unloads, and the background stores it.
           this.state.handoffAt = Date.now();
+          jfsLog('handoff.written', { page: this.state.page, why: 'next page' });
           await this.save();
           return;
         }
@@ -531,9 +683,17 @@ const JFScraper = {
       }
     } catch (e) {
       console.warn('[JobFilter] scraper error:', e);
+      jfsLog('run.error', () => ({ error: String((e && e.message) || e), stack: e && e.stack }));
       if (this.alive(token)) await this.pause(`error: ${(e && e.message) || e}`);
     } finally {
       if (this.activeRunId === token) this.activeRunId = 0;
+      // Why the loop stopped: a newer loop / Stop / Pause (current false), the run's end, or a hand-off.
+      jfsLog('run.exit', () => ({
+        token,
+        current: token === this.runId,
+        running: this.state ? this.state.running : null,
+        paused: this.state ? this.state.paused : null,
+      }));
     }
   },
 
@@ -553,37 +713,56 @@ const JFScraper = {
   collectNewCards(settings) {
     const fresh = [];
     const idsNow = new Set();
+    // For the debug log only: what happened to the cards of this pass.
+    const tally = { cards: 0, unreadable: 0, noIdOrAgain: 0, siteHidden: 0, ruleHidden: [] };
     for (const el of this.adapter.findCards()) {
+      tally.cards += 1;
       const job = jfsReadCard(this.adapter, el);
-      if (!job) continue;
+      if (!job) {
+        tally.unreadable += 1;
+        continue;
+      }
       if (!job.job_id || this.done.has(job.job_id) || idsNow.has(job.job_id)) {
         // Nothing to judge (no id, or a copy of a job we already have), but the rules still apply to it:
         // the passive filter is off during a run. Judged cards keep their highlight.
+        tally.noIdOrAgain += 1;
         if (!el.dataset.jfState) this.applyRules(el, job, settings);
         continue;
       }
-      if (this.applyRules(el, job, settings)) {
+      const rule = this.applyRules(el, job, settings);
+      if (rule) {
+        tally.ruleHidden.push({ id: job.job_id, title: jfsCut(job.title, 60), why: rule });
         this.finishJob(job, 'ruleHidden');
         continue;
       }
-      if (jfsIsHidden(el)) continue; // hidden by the site itself — not ours to judge
+      if (jfsIsHidden(el)) {
+        tally.siteHidden += 1;
+        continue; // hidden by the site itself — not ours to judge
+      }
       idsNow.add(job.job_id);
       fresh.push({ el, job });
     }
+    jfsLog('rules', () =>
+      Object.assign({ page: this.state.page, toAI: fresh.length }, tally, { ruleHiddenCount: tally.ruleHidden.length })
+    );
     return fresh;
   },
 
   /** Step 2 — title AI for one batch, then step 3 (JD AI) for the jobs that passed. */
   async screenTitles(token, settings, items) {
     if (settings.aiEnabled === false) {
+      jfsLog('title.skip', { n: items.length, why: 'AI is off (rules only)' });
       items.forEach((item) => this.finishJob(item.job, null)); // rules-only run: leave the cards as they are
       return;
     }
+    const sentAt = Date.now();
+    jfsLog('title.send', { n: items.length, ids: items.map((item) => item.job.job_id) });
     const reply = await jfsSend({
       type: 'screenTitle',
       site: this.adapter.site,
       jobs: items.map((item) => jfsJobPayload(item.job)),
     });
+    jfsLog('title.reply', () => jfsTitleReplyLog(items, reply, Date.now() - sentAt));
     if (!this.alive(token)) return;
     if (reply.error === 'ai_disabled') {
       items.forEach((item) => this.finishJob(item.job, null)); // AI switched off: rules only, mark nothing
@@ -619,8 +798,11 @@ const JFScraper = {
     // Several lanes, each reading one job at a time. JS runs one callback at a time, so shift() hands
     // every job to exactly one lane: no job is read twice.
     const pace = jfsJdPace(this.state.mode, this.adapter.site, settings[this.adapter.site] || {});
-    const lane = async () => {
-      while (needJd.length && this.alive(token)) await this.screenJd(token, settings, needJd.shift(), pace.gapMs);
+    jfsLog('jd.queue', { n: needJd.length, lanes: Math.min(pace.lanes, needJd.length), gapMs: pace.gapMs });
+    // laneNo (1, 2, ...) only names the lane in the debug log
+    const lane = async (_, laneIndex) => {
+      const laneNo = laneIndex + 1;
+      while (needJd.length && this.alive(token)) await this.screenJd(token, settings, needJd.shift(), pace.gapMs, laneNo);
     };
     await Promise.all(Array.from({ length: Math.min(pace.lanes, needJd.length) }, lane));
   },
@@ -632,20 +814,35 @@ const JFScraper = {
     this.finishJob(item.job, 'duplicates');
   },
 
-  /** Step 3 — read the full JD and let the backend judge it. gapMs: [min, max] wait before the job page, or null. */
-  async screenJd(token, settings, item, gapMs) {
-    const jd = await this.readJd(token, item, gapMs);
+  /**
+   * Step 3 — read the full JD and let the backend judge it. gapMs: [min, max] wait before the job page, or null.
+   * laneNo: which lane reads it (debug log only).
+   */
+  async screenJd(token, settings, item, gapMs, laneNo) {
+    const jd = await this.readJd(token, item, gapMs, laneNo);
     if (jd === null) return; // stopped / paused meanwhile: the job stays unfinished and is retried after Resume
     if (!jd) {
       await this.skipJob(item, 'could not read the job description');
       return;
     }
 
+    const sentAt = Date.now();
     const verdict = await jfsSend({
       type: 'screenJd',
       site: this.adapter.site,
       job: { ...jfsJobPayload(item.job), jd },
     });
+    jfsLog('jd.verdict', () => ({
+      id: item.job.job_id,
+      lane: laneNo,
+      ms: Date.now() - sentAt,
+      decision: verdict.decision,
+      stage: verdict.stage,
+      score: verdict.match_score,
+      reason: jfsCut(verdict.reason, 120),
+      cached: verdict.cached,
+      error: verdict.error,
+    }));
     if (!this.alive(token)) return;
     if (verdict.error) {
       await this.skipJob(item, `JD AI: ${verdict.error}`, verdict.error !== 'ai_disabled');
@@ -659,7 +856,7 @@ const JFScraper = {
    * adapter.fetchJd answers {jd, blocked}. A blocked job page is usually a short rate limit: back off, then
    * retry the SAME job (backOff decides how long, or pauses).
    */
-  async readJd(token, item, gapMs) {
+  async readJd(token, item, gapMs, laneNo) {
     for (;;) {
       if (!(await this.waitOutBackoff(token))) return null; // every lane holds back while the site rate-limits us
       if (gapMs) await jfsRandomSleep(...gapMs); // polite gap between job pages; also staggers lanes after a wait
@@ -668,12 +865,21 @@ const JFScraper = {
 
       this.adapter.highlight(item.el, 'active');
       const startedAt = Date.now();
+      jfsLog('jd.start', { id: item.job.job_id, lane: laneNo, blockLevel: this.blockLevel });
       let page = null;
       try {
         page = await this.adapter.fetchJd(item.job);
       } catch (e) {
         console.warn('[JobFilter] fetchJd failed:', e);
+        jfsLog('jd.error', () => ({ id: item.job.job_id, lane: laneNo, error: String((e && e.message) || e) }));
       }
+      jfsLog('jd.end', () => ({
+        id: item.job.job_id,
+        lane: laneNo,
+        ms: Date.now() - startedAt,
+        len: page && typeof page.jd === 'string' ? page.jd.length : 0,
+        blocked: page ? page.blocked : 'no answer',
+      }));
       if (!this.alive(token)) return null;
       if (!page || !page.blocked) {
         if (startedAt > this.lastBlockAt) this.blockLevel = 0; // the site answers normally again
@@ -691,6 +897,7 @@ const JFScraper = {
   async backOff(token, blockedMessage, startedAt) {
     if (startedAt > this.lastBlockAt) {
       if (this.blockLevel >= JFS_BACKOFF_SECONDS.length) {
+        jfsLog('backoff.giveUp', { message: blockedMessage });
         await this.pause(`Still blocked after waiting ${JFS_BACKOFF_SECONDS.join(', ')} seconds. ${blockedMessage}`);
         return false;
       }
@@ -702,7 +909,10 @@ const JFScraper = {
         waitUntil: this.lastBlockAt + seconds * 1000,
       });
       console.warn('[JobFilter] job page blocked,', this.state.waitReason);
+      jfsLog('backoff.wait', { seconds, level: this.blockLevel, waitUntil: this.state.waitUntil, message: blockedMessage });
       await this.save();
+    } else {
+      jfsLog('backoff.join', { why: 'this request started before the current wait (same burst)' });
     }
     return this.waitOutBackoff(token);
   },
@@ -714,6 +924,7 @@ const JFScraper = {
       if (left > 0) {
         await this.nap(left);
       } else {
+        jfsLog('backoff.over', { lateMs: -left }); // lateMs: how late the browser ran the timer
         Object.assign(this.state, { waitReason: null, waitUntil: null }); // over: the popup stops showing it
         await this.save();
       }
@@ -746,11 +957,21 @@ const JFScraper = {
     // Saving the job on the site = "processed": with hideSaved on, it stays hidden on later visits.
     const mode = (settings[this.adapter.site] || {}).markProcessed || 'none';
     if (mode === 'all' || (mode === 'rejected' && rejected)) {
+      const clickedAt = Date.now();
+      let saveError = null;
       try {
         await this.adapter.markProcessed(el);
       } catch (e) {
         console.warn('[JobFilter] markProcessed failed:', e);
+        saveError = String((e && e.message) || e);
       }
+      // savedNow: the card shows the site's "saved" mark after the click (read again from the card)
+      jfsLog('save', () => ({
+        id: job.job_id,
+        ms: Date.now() - clickedAt,
+        savedNow: (jfsReadCard(this.adapter, el) || {}).isSaved,
+        error: saveError,
+      }));
       if (!this.alive(token)) return;
       await jfsRandomSleep(...JFS_GAP_MS.saveClick); // no rapid-fire save clicks
     }
@@ -759,6 +980,7 @@ const JFScraper = {
 
   /** Grey card: could not be judged. Never hidden, never marked, so the next run tries again. */
   async skipJob(item, why, isError = true) {
+    jfsLog('job.skip', { id: item.job.job_id, why, countsAsError: isError });
     this.adapter.highlight(item.el, 'skip');
     this.finishJob(item.job, null);
     if (isError) await this.countError(why);
@@ -801,6 +1023,9 @@ const JFScraper = {
    */
   retire() {
     if (this.orphaned) return;
+    // Usually can't reach the debug log any more (that is why we retire): the console keeps a note in this tab.
+    jfsLog('retire', { why: 'extension reloaded under this page' });
+    console.info('[JobFilter] the extension was reloaded: this page stops scraping. Reload the tab to start again.');
     this.orphaned = true;
     this.cancelLoops();
     this.activeRunId = 0;
@@ -844,6 +1069,7 @@ const JFScraper = {
     console.warn('[JobFilter]', why);
     this.state.counts.errors += 1;
     this.errorsInRow += 1;
+    jfsLog('error', { why, inRow: this.errorsInRow, total: this.state.counts.errors });
     if (this.errorsInRow >= JFS_MAX_ERRORS_IN_ROW) {
       await this.pause(`${JFS_MAX_ERRORS_IN_ROW} errors in a row (last: ${why}). Check the backend, then press Resume`);
     }
@@ -856,8 +1082,12 @@ const JFScraper = {
       reason = await this.adapter.detectBlock(); // may be sync or async (Glassdoor closes a popup first)
     } catch (e) {
       console.warn('[JobFilter] detectBlock failed:', e);
+      jfsLog('detectBlock.error', () => ({ error: String((e && e.message) || e) }));
     }
-    if (reason) await this.pause(reason);
+    if (reason) {
+      jfsLog('blocked', { reason, url: location.href, title: document.title });
+      await this.pause(reason);
+    }
     return !!reason;
   },
 
@@ -870,12 +1100,14 @@ const JFScraper = {
 
   async pause(reason) {
     if (!this.state.running || this.state.paused) return; // with parallel lanes the first reason wins
+    jfsLog('run.pause', { reason, page: this.state.page, pagesDone: this.state.pagesDone, counts: this.state.counts });
     Object.assign(this.state, { paused: true, pauseReason: reason, waitReason: null, waitUntil: null });
     this.cancelLoops(); // like stop(): lanes still waiting on a job page exit, and Resume works right away
     await this.save();
   },
 
   async end(reason) {
+    jfsLog('run.end', () => ({ reason, page: this.state.page, pagesDone: this.state.pagesDone, counts: this.state.counts }));
     Object.assign(this.state, { running: false, paused: false, pauseReason: reason, waitReason: null, waitUntil: null });
     await this.save();
   },
@@ -888,6 +1120,7 @@ const JFScraper = {
     if (!this.state || this.orphaned) return;
     const reply = await jfsSend({ type: 'scrapeProgress', state: this.state });
     if (!reply.error || reply.orphaned) return; // orphaned: storage is unreachable from here too
+    jfsLog('save.fallback', { error: reply.error }); // the background didn't store it: we write it ourselves
     try {
       await chrome.storage.local.set({ scrape_state: this.state });
     } catch (e) {

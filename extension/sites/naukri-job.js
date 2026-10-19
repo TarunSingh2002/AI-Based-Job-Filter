@@ -35,6 +35,16 @@
     });
   }
 
+  /** One event for the debug log (popup "Copy debug log"); the background cuts long text. Never throws. */
+  function log(ev, data) {
+    try {
+      const entry = Object.assign({ t: Date.now(), site: 'naukri', src: 'worker', ev }, data);
+      chrome.runtime.sendMessage({ type: 'debugLog', entry }, () => void chrome.runtime.lastError);
+    } catch (e) {
+      // a lost log line must never stop the JD from being read
+    }
+  }
+
   function textOf(el) {
     if (!el) return '';
     return (el.innerText || el.textContent || '')
@@ -100,8 +110,10 @@
     let finished = false;
     let lastJd = '';
     let stableTimer = 0;
+    const startedAt = Date.now(); // debug log only
     const observer = new MutationObserver(check);
     const giveUpTimer = setTimeout(() => finish({ error: looksBlocked() ? 'blocked' : 'timeout' }), WAIT_MS);
+    log('wk.start', { job: jobId, url: location.pathname, title: document.title });
 
     function finish(result) {
       if (finished) return;
@@ -109,6 +121,14 @@
       observer.disconnect();
       clearTimeout(stableTimer);
       clearTimeout(giveUpTimer);
+      log('wk.finish', {
+        job: jobId,
+        ms: Date.now() - startedAt,
+        len: result.jd ? result.jd.length : 0,
+        error: result.error || null,
+        pageTitle: document.title,
+        jdTitle: result.title, // the job title shown on the page (checks it is the right job)
+      });
       send({ type: 'naukriJdReady', jobId, ...result });
     }
 
@@ -126,6 +146,7 @@
         if (jd) stableTimer = setTimeout(() => finish(readResult(jd)), jd.length >= MIN_JD_CHARS ? STABLE_MS : SHORT_STABLE_MS);
       } catch (e) {
         console.warn('[JobFilter] reading the JD failed:', e);
+        log('wk.error', { job: jobId, error: String((e && e.message) || e) });
       }
     }
 

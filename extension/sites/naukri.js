@@ -49,21 +49,47 @@ function naukriNextLink() {
 }
 
 /**
+ * The filters of the search being scraped: the copy saved when the run started (scrape_state.searchQuery), so a
+ * page whose own address lost them can't pass that on. Falls back to this page's address outside a run.
+ */
+function naukriSearchQuery() {
+  const state = JFScraper.state;
+  return (state && state.running && state.searchQuery) || location.search;
+}
+
+/**
  * The next page's URL WITH the search filters. Naukri's "Next" link holds only the page path (/ai-engineer-jobs-2);
  * Naukri's own script adds the filters (?k=...&experience=1&jobAge=1) when you click it. Going to the bare link
- * drops them, and the search explodes from ~200 to ~40,000 jobs. So: the link's path + the current query string
- * (kept exactly as it is), plus any parameter the link itself carries.
+ * drops them, and the search explodes from ~200 to ~40,000 jobs. So: the link's path + the run's saved query string
+ * (kept exactly as it is); a parameter the link itself carries is kept unless the saved filters set it too.
  */
 function naukriNextUrl(link) {
   const url = new URL(link.href, location.href);
+  const saved = naukriSearchQuery();
   if (!url.search) {
-    url.search = location.search;
+    url.search = saved;
   } else {
-    const params = new URLSearchParams(location.search);
-    new URLSearchParams(url.search).forEach((value, key) => params.set(key, value));
+    const params = new URLSearchParams(url.search);
+    new URLSearchParams(saved).forEach((value, key) => params.set(key, value)); // the saved filters win
     url.search = params.toString();
   }
   return url.href;
+}
+
+/** Naukri's total job count for the search, from the tab title ("154 Data Scientist…", "Page 2 - 154 …"). */
+function naukriTotalJobs() {
+  const match = /^(?:page \d+ - )?([\d,]+)\s/i.exec(document.title || '');
+  return match ? parseInt(match[1].replace(/,/g, ''), 10) : null;
+}
+
+/** True when every filter saved at the start of the run is in this page's address with the same value. */
+function naukriFiltersKept(savedQuery) {
+  const now = new URLSearchParams(location.search);
+  let kept = true;
+  new URLSearchParams(savedQuery).forEach((value, key) => {
+    if (now.get(key) !== value) kept = false;
+  });
+  return kept;
 }
 
 const naukriAdapter = {
@@ -113,6 +139,33 @@ const naukriAdapter = {
     if (!/\/job-listings-/.test(job.link)) return { jd: '', blocked: null }; // only real job pages run naukri-job.js
     const reply = await jfsSend({ type: 'naukriFetchJd', url: job.link, jobId: job.job_id });
     return { jd: reply.jd || '', blocked: reply.error === 'blocked' ? NAUKRI_JOB_BLOCKED : null };
+  },
+
+  /**
+   * Called by the engine before each results page is processed. Guards against a search that lost its filters:
+   *  - this page's address misses a saved filter → reload it once with the saved filters ({navigate});
+   *  - still missing after that reload, or the total job count exploded (more than double page 1's, e.g. 145 →
+   *    11,786) → end the run ({stop}) instead of scraping every Naukri job.
+   */
+  checkSearch(state) {
+    const saved = state.searchQuery || '';
+    if (saved && !naukriFiltersKept(saved)) {
+      if (state.searchFixedPage !== state.page) {
+        state.searchFixedPage = state.page;
+        return { navigate: location.pathname + saved };
+      }
+      return { stop: `Naukri dropped the search filters on page ${state.page} and they could not be restored. Stopped so it doesn't scrape all jobs` };
+    }
+    const total = naukriTotalJobs();
+    if (total == null) return null;
+    if (state.firstTotal == null) {
+      state.firstTotal = total; // page 1 (or the first page this run saw)
+      return null;
+    }
+    if (total > Math.max(state.firstTotal * 2, state.firstTotal + 300)) {
+      return { stop: `Naukri's results jumped from ${state.firstTotal} to ${total} jobs on page ${state.page} (search filters lost). Stopped so it doesn't scrape all jobs` };
+    }
+    return null;
   },
 
   async nextPage() {

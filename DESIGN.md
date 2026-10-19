@@ -590,7 +590,12 @@ Site specifics (verified live 2026-10-14 unless noted):
   company `a.comp-name`; experience `.expwdth` (e.g. "3-8 Yrs"); location `.locWdth`; saved = `.ni-job-tuple-icon-srpSaveFilled` exists;
   save button `span.save-job-tag` (unsaved has class `un-saved`); promoted wrapper `.cust-job-tuple.srp-tuple.checkbox` (hide its `section`);
   next page = pagination `a` whose text is "Next" (href like `/ai-engineer-jobs-2`) → `location.href` = that path WITH the
-  current query string (`naukriNextUrl`: the bare link drops the search filters); disabled/missing → "none".
+  run's SAVED query string (`scrape_state.searchQuery`, recorded at Start; `naukriNextUrl`: the bare link drops the
+  search filters); disabled/missing → "none".
+  Filter guard (`checkSearch(state)`, called by the engine before each results page): a saved filter missing/changed in
+  this page's address → reload the page once with the saved filters (`{navigate}`); still wrong, or Naukri's total job
+  count (tab title "154 …" / "Page 2 - 154 …") is more than max(2× page 1's, page 1's + 300) → end the run (`{stop}`)
+  instead of scraping every Naukri job (2026-10-19: 145 → 11,786 after the filters were lost).
   JD: the job page is an app shell; its JD API requires reCAPTCHA (do NOT call it). So `fetchJd` sends `naukriFetchJd` → background
   opens the job URL in a dedicated **minimized worker window** (create once, `focused:false, state:"minimized"`; up to `jdTabs` tabs (max 4), reuse them),
   naukri-job.js on that page waits for the JD, replies `naukriJdReady`, background resolves and navigates the tab to the next URL (or about:blank).

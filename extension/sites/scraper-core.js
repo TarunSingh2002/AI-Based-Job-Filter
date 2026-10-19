@@ -419,6 +419,11 @@ const JFScraper = {
       pauseReason: null, // why it paused — or, once running is false, why it ended (the popup shows it)
       waitReason: null, // "waiting 30s (site rate limit)" while all lanes back off (the popup shows it)
       waitUntil: null, // when that wait ends (ms timestamp)
+      // The search's filters as they were when the run started (?experience=1&jobAge=1...). Later pages are built
+      // from this copy, and adapter.checkSearch() compares each page against it (see run()).
+      searchQuery: location.search,
+      firstTotal: null, // the site's total job count on the first page (adapter.checkSearch fills it in)
+      searchFixedPage: null, // the page already reloaded once to restore lost filters (no reload loops)
     };
     this.done.clear();
     await this.save();
@@ -479,6 +484,20 @@ const JFScraper = {
         await jfsSleep(800); // let the list finish rendering
         const settings = await jfLoadSettings(); // re-read per page so popup changes apply mid-run
         if (!this.alive(token)) return;
+
+        // The site's own sanity check of this page (Naukri: the search filters are still applied and the result
+        // count didn't explode). Losing the filters once turned 145 jobs into 11,786 — never scrape that.
+        const check = this.adapter.checkSearch ? this.adapter.checkSearch(this.state) : null;
+        if (check && check.navigate) {
+          this.state.handoffAt = Date.now(); // the reloaded page takes the run over (resumeIfRunning)
+          await this.save();
+          location.replace(check.navigate);
+          return;
+        }
+        if (check && check.stop) {
+          await this.end(check.stop);
+          return;
+        }
 
         await this.processPage(token, settings);
         if (!this.alive(token)) return;

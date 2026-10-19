@@ -187,7 +187,8 @@ async def screen_jd(req: JdRequest):
 
     cached = app.state.store.get_verdict(req.site, job["job_id"])
     if cached and cached["stage"] == "jd":
-        return pick(cached, JD_RESULT_FIELDS)  # already done: no AI call, no second CSV row
+        # already done: no AI call, no second CSV row (re-checked against today's experience limit)
+        return pick(decide.recheck_years(cached, app.state.profile), JD_RESULT_FIELDS)
 
     if len(job["jd"].strip()) < MIN_JD_CHARS:
         # No usable JD: fall back to the title stage. Its reject stands; a pass becomes "no_jd" and is
@@ -248,7 +249,7 @@ async def title_verdict(site: str, job: dict) -> dict:
     Steps 1-3 have no await in between, so of two copies in one batch the first claims, the second is a repost."""
     cached = app.state.store.get_verdict(site, job["job_id"])
     if cached and not decide.outdated_seniority_reject(cached, app.state.profile):
-        return cached
+        return decide.recheck_years(cached, app.state.profile)
     original = claim_or_find_original(site, job)
     if original:
         log.info("%s title reject repost of %s %s | %s @ %s", site, *original, job["title"], job["company"])

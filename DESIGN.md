@@ -367,7 +367,7 @@ mismatched header. jobs.xlsx and /stats still read the renamed files.
   `match_score, position_score, skills_score, confidence, title, company, site, location, min_years, work_mode, role_family, link, time, job_id`.
 - Sheet `Rejected`: all rejected rows, newest first. Columns: `time, site, stage, title, company, reason, confidence, link, job_id`.
 - Each sheet is an Excel Table (filter buttons; no Table when there are no data rows), frozen header, set widths.
-  Numbers are numbers, `time` is a datetime, `job_id` is text (leading zeros kept), `link` is a clickable "open"
+  Numbers are numbers, `time` is a datetime, `job_id` is text (leading zeros kept), `link` is the clickable full address (shown as text too: some viewers drop links when they re-save)
   hyperlink (http/https only). Every other value is a text cell (never a formula); store.py's CSV formula guard
   (leading `'`) is dropped there, and characters XML 1.0 forbids are removed.
 - Rebuilt from scratch, so edits saved in jobs.xlsx are lost (README says: Save As for your own notes).

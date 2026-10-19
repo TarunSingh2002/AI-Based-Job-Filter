@@ -93,7 +93,7 @@ one isn't on any list.
    - If the results page itself shows a captcha or a login wall, the run pauses at once: solve it yourself, then
      press **Resume**. The extension never tries to solve or get around a captcha.
 4. Open `backend/output/<today>/jobs.xlsx` in Excel and apply. Sheet **Matches**: every site's matches, best
-   match score first (click a header arrow to sort or filter; "open" is the job link). Sheet **Rejected**: every
+   match score first (click a header arrow to sort or filter; the link column is the clickable job address. Open jobs.xlsx in Excel: some VS Code spreadsheet viewers re-save it and drop the links). Sheet **Rejected**: every
    rejected job and why, newest first, which is useful if you think the AI is getting something wrong.
    - **match_score (0-10) = position_score (0-5) + skills_score (0-5).** position = how surely the job is one of
      your wanted role types, skills = how well your `skills` cover the job's core skills. Rows from before this

@@ -36,11 +36,11 @@ ILLEGAL_XML_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff￾￿]")
 MATCH_SHEET = [
     ("match_score", 13), ("position_score", 15), ("skills_score", 13), ("confidence", 12), ("title", 45),
     ("company", 30), ("site", 11), ("location", 22), ("min_years", 11), ("work_mode", 12), ("role_family", 20),
-    ("link", 7), ("time", 18), ("job_id", 16),
+    ("link", 45), ("time", 18), ("job_id", 16),
 ]
 REJECT_SHEET = [
     ("time", 18), ("site", 11), ("stage", 8), ("title", 45), ("company", 30), ("reason", 40),
-    ("confidence", 12), ("link", 7), ("job_id", 16),
+    ("confidence", 12), ("link", 45), ("job_id", 16),
 ]
 NUMBER_COLUMNS = {"match_score", "position_score", "skills_score", "confidence", "min_years"}
 
@@ -125,7 +125,9 @@ def _set_cell(cell, column: str, text: str) -> None:
         cell.number_format = "yyyy-mm-dd hh:mm"
     elif column == "link" and text.startswith(("http://", "https://")):
         # Only web links become clickable: the link comes from a job page, so never file:// or javascript:.
-        cell.value, cell.hyperlink, cell.style = "open", text, "Hyperlink"
+        # The full address as the text: some viewers (e.g. VS Code's spreadsheet viewers) drop the link when they
+        # re-save the file; the address then stays visible and copyable instead of a dead "open".
+        cell.value, cell.hyperlink, cell.style = text, text, "Hyperlink"
     else:
         if text[:1] == "'" and text[1:2] in ("=", "+", "-", "@"):
             # store.py's formula guard for the CSV ("'=..."). This cell is text-only, so it isn't needed here

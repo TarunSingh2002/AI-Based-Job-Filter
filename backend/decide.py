@@ -78,6 +78,15 @@ def title_seniority(title: str) -> str:
     return "mid"
 
 
+def recheck_years(verdict: dict, profile: Profile) -> dict:
+    """A verdict saved earlier, re-checked against today's experience limit (a code-only rule, no AI call): a cached
+    pass whose minimum years is now above experience_years + experience_tolerance is served as a reject. So lowering
+    the limit in profile.yaml also hides jobs judged before (e.g. an "8-11 years" job that passed on an old rule)."""
+    if verdict.get("decision") == "pass" and _needs_too_many_years(verdict.get("min_years"), profile):
+        return {**verdict, "decision": "reject", "reason": f"needs {verdict['min_years']}+ yrs"}
+    return verdict
+
+
 def outdated_seniority_reject(verdict: dict, profile: Profile) -> bool:
     """A cached title reject "seniority: <level>" that profile.yaml no longer makes (allowed_seniority removed,
     or that level added to it). app.py screens such a job again instead of serving the old reject, so turning

@@ -78,6 +78,7 @@ function wireEvents() {
   }
   $("save").addEventListener("click", safely(saveSettings));
   $("clearPartial").addEventListener("click", safely(clearPartialList));
+  $("forgetLiVerdicts").addEventListener("click", safely(forgetLinkedInVerdicts));
   $("checkHealth").addEventListener("click", safely(checkHealth));
   $("autoStart").addEventListener("click", safely(startAutomation));
   $("autoStop").addEventListener("click", safely(stopAutomation));
@@ -209,6 +210,20 @@ async function clearPartialList() {
     await chrome.storage.local.set({ li_partial: { items: [] } });
   } catch (err) {
     showStatus("Could not clear the list: " + errorText(err), true);
+  }
+}
+
+/**
+ * LinkedIn keeps the AI verdicts it has seen (li_verdicts) and shows them without asking the backend. Forgetting
+ * them makes the next LinkedIn page ask again, and the backend re-checks its saved verdicts against today's
+ * profile.yaml (e.g. a lower experience limit). The LinkedIn tab keeps its copy in memory until it is refreshed.
+ */
+async function forgetLinkedInVerdicts() {
+  try {
+    await chrome.storage.local.remove("li_verdicts");
+    showStatus("Saved LinkedIn verdicts forgotten. Refresh the LinkedIn tab.");
+  } catch (err) {
+    showStatus("Could not forget them: " + errorText(err), true);
   }
 }
 

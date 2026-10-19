@@ -1,7 +1,7 @@
 # Your candidate profile. decide.py takes every threshold from here - restart the backend after editing.
 
 # ── Experience ────────────────────────────────────────────────────────────────────────────────────
-experience_years: 1.5          # SET THIS: your years of work experience
+experience_years: 2          # SET THIS: your years of work experience
 experience_tolerance: 0.5      # accept jobs asking for up to experience_years + this many years
                                # -> 1.5 + 0.5 = jobs whose MINIMUM is at most 2 years ("0-2", "1-3", "2+" pass;
                                #    "3-5", "5+", "8-11" are rejected) on every site: LinkedIn, Naukri, Indeed, Glassdoor

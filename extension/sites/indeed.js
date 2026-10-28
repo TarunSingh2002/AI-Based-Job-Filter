@@ -19,6 +19,9 @@ const INDEED_SEL = {
   // .react-native-html-content (new layout); #jobDescriptionText is the older layout.
   pane: '#jobsearch-ViewjobPaneWrapper',
   paneJd: ['.react-native-html-content', '#jobDescriptionText'],
+  // Verified live 2026-10-28: the panel now opens with "Return to Search Result" / "Job Post Details", so its first
+  // line is no longer the title. Older layouts: .jobsearch-JobInfoHeader-title.
+  paneTitle: ['[data-testid="vj-job-title"]', '.jobsearch-JobInfoHeader-title', '[data-testid="jobsearch-JobInfoHeader-title"]'],
 };
 const INDEED_PANE_TIMEOUT_MS = 15000; // the panel normally shows the clicked job within 1-1.5 s
 const INDEED_PANE_STABLE_MS = 400; // the description renders in chunks: wait until it stops changing
@@ -43,7 +46,14 @@ function indeedPane() {
       break;
     }
   }
-  return { title: (pane.innerText || '').split('\n')[0].trim(), jd };
+  let title = '';
+  for (const selector of INDEED_SEL.paneTitle) {
+    const el = pane.querySelector(selector);
+    title = el ? (el.innerText || el.textContent || '').trim() : '';
+    if (title) break;
+  }
+  if (!title) title = (pane.innerText || '').split('\n')[0].trim(); // last resort: the panel's first line
+  return { title, jd };
 }
 
 /** Loose title compare: the panel and the card can differ in punctuation / spacing. */

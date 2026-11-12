@@ -185,8 +185,8 @@ async function applyLinkedInHide(sender, jobIds) {
   return { ok: true };
 }
 
-// One rule hiding every given card. Both selectors are needed: some cards carry the id on the <li>,
-// others only on an inner element.
+// One rule hiding every given card. Classic search: some cards carry the id on the <li>, others only on an
+// inner element. AI search: the id is in the card's componentkey.
 function buildLinkedInHideCss(jobIds) {
   // LinkedIn job ids are numbers; stripping anything else means a weird id can never break the CSS.
   const ids = [...new Set((jobIds || []).map((id) => String(id).replace(/[^A-Za-z0-9_-]/g, "")).filter(Boolean))];
@@ -194,6 +194,9 @@ function buildLinkedInHideCss(jobIds) {
   const selectors = ids.flatMap((id) => [
     'li[data-occludable-job-id="' + id + '"]',
     'li.scaffold-layout__list-item:has([data-job-id="' + id + '"])',
+    // AI job search (/jobs/search-results/): the card and the bordered box around it.
+    'div:has(> div > div[role="button"][componentkey="job-card-component-ref-' + id + '"])',
+    'div[role="button"][componentkey="job-card-component-ref-' + id + '"]',
   ]);
   return selectors.join(",\n") + " {display:none !important}";
 }

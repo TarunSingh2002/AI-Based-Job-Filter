@@ -43,9 +43,15 @@
   const NO_DETAIL = { title: '', company: '', linkId: null, jd: '' };
 
   // Selector arrays are tried in order (first match wins), so a LinkedIn redesign of one class only costs a fallback.
+  // Two layouts exist: classic job search (scaffold-layout classes) and the AI job search at /jobs/search-results/,
+  // whose classes are hashed (e.g. "jkelje jkelo5") and change on every build. For the AI layout we only use its
+  // stable hooks: componentkey="job-card-component-ref-<id>" on each card, componentkey="SearchResultsMainContent"
+  // on the list, and data-testid="expandable-text-box" under the "About the job" heading.
+  const NEW_CARD = 'div[role="button"][componentkey^="job-card-component-ref-"]';
+  const NEW_CARD_ID = /^job-card-component-ref-(\d+)$/;
   const SEL = {
-    list: '.scaffold-layout__list',
-    card: 'li.scaffold-layout__list-item, li[data-occludable-job-id]',
+    list: '.scaffold-layout__list, [componentkey="SearchResultsMainContent"]',
+    card: 'li.scaffold-layout__list-item, li[data-occludable-job-id], ' + NEW_CARD,
     cardTitle: ['.job-card-list__title--link', 'a[href*="/jobs/view/"]'],
     cardCompany: ['.artdeco-entity-lockup__subtitle span', '.artdeco-entity-lockup__subtitle'],
     cardLocation: ['.artdeco-entity-lockup__caption', '.job-card-container__metadata-item'],
@@ -136,7 +142,22 @@
   // (all_frames), and only the copy that actually holds the jobs UI may act: the others stay idle so they never
   // overwrite the side panel or send an empty hide list.
   function hasJobsUi() {
-    return !!(document.querySelector(SEL.list) || document.querySelector(SEL.card) || first(document, SEL.jd));
+    return !!(document.querySelector(SEL.list) || document.querySelector(SEL.card) || first(document, SEL.jd) ||
+              newLayoutJd(document));
+  }
+
+  // AI-search layout: the JD is the expandable text box in the block headed "About the job" (the "About the company"
+  // block has one too, so the heading decides).
+  function newLayoutJd(root) {
+    for (const h of root.querySelectorAll('h2')) {
+      if (!/^about the job$/i.test(text(h))) continue;
+      let block = h.parentElement;
+      for (let k = 0; k < 3 && block; k++, block = block.parentElement) {
+        const box = block.querySelector('[data-testid="expandable-text-box"]');
+        if (box) return box;
+      }
+    }
+    return null;
   }
 
   // Only the copy whose document shows the jobs UI right now may write the side panel and badge. A copy in a frame
@@ -214,6 +235,8 @@
   // ---- reading cards and the detail pane (read-only) ----------------------------------------------------
 
   function cardId(li) {
+    const key = NEW_CARD_ID.exec(li.getAttribute('componentkey') || '');
+    if (key) return key[1];
     const own = li.getAttribute('data-occludable-job-id');
     if (own) return own;
     const inner = li.querySelector('[data-job-id]');
@@ -222,6 +245,7 @@
 
   // Returns null when LinkedIn has emptied the card (off-screen cards stay in the list as bare <li> placeholders).
   function readCard(li) {
+    if (li.matches(NEW_CARD)) return readNewCard(li);
     const link = first(li, SEL.cardTitle);
     // The title link also holds a visually-hidden copy ("... with verification"); <strong> has the clean title.
     const title = text(link && (link.querySelector('strong') || link.querySelector('span[aria-hidden="true"]') || link));
@@ -238,9 +262,32 @@
     };
   }
 
+  // AI-search card: <p> title (a visually-hidden "... (Verified job)" span plus an aria-hidden clean copy), then
+  // <p> company, then <p> location. Footer lines ("Promoted", "Applied 2 days ago") are matched by their whole text,
+  // never the title, so "Applied Scientist" is not taken for an applied job.
+  function readNewCard(card) {
+    const ps = Array.from(card.querySelectorAll('p'));
+    const titleP = ps[0];
+    const title = text(titleP && (titleP.querySelector('span[aria-hidden="true"]') || titleP));
+    const company = text(ps[1]);
+    if (!title || !company) return null;
+    const lines = Array.from(card.querySelectorAll('p, span, li'))
+      .filter((el) => !titleP.contains(el))
+      .map((el) => text(el));
+    return {
+      title,
+      company,
+      location: text(ps[2]),
+      promoted: lines.some((t) => /^Promoted\b/.test(t)),
+      applied: lines.some((t) => /^Applied(\s+(on|\d|·)|$)/.test(t)),
+      dismissed: (card.textContent || '').includes('show you this job again'),
+    };
+  }
+
   // Card info for one job: the live card if it is rendered, else what we read earlier, else null.
   function cardInfoFor(id) {
-    let li = document.querySelector('li[data-occludable-job-id="' + id + '"]');
+    let li = document.querySelector('li[data-occludable-job-id="' + id + '"]') ||
+             document.querySelector('div[role="button"][componentkey="job-card-component-ref-' + id + '"]');
     if (!li) {
       const inner = document.querySelector('[data-job-id="' + id + '"]');
       li = inner && inner.closest('li');
@@ -254,7 +301,8 @@
     const pane = first(document, SEL.detailPane) || document;
     const titleEl = first(pane, SEL.detailTitle);
     const link = titleEl && (titleEl.closest('a') || titleEl.querySelector('a[href*="/jobs/view/"]'));
-    const jdEl = first(pane, SEL.jd);
+    const oldJdEl = first(pane, SEL.jd);
+    const jdEl = oldJdEl || newLayoutJd(document);
     // innerText keeps line breaks between paragraphs/bullets, which textContent would glue together.
     const jd = jdEl ? (jdEl.innerText || jdEl.textContent || '') : '';
     return {
@@ -262,6 +310,7 @@
       company: text(first(pane, SEL.detailCompany)),
       linkId: link ? jobIdFromHref(link.getAttribute('href')) : null,
       jd: jd.replace(/[ \t\r]+/g, ' ').replace(/\n\s*\n\s*/g, '\n\n').trim(),
+      newLayout: !oldJdEl && !!jdEl,
     };
   }
 
@@ -275,7 +324,9 @@
   // Best evidence first: the top-card title links to /jobs/view/<id>/; otherwise compare its title with the card's.
   function detailShowsJob(jobId, detail, card) {
     if (detail.linkId) return detail.linkId === jobId;
-    if (!detail.title) return false;
+    // The AI-search layout has no stable top-card title to read; there the settled-JD checks in waitForDetail
+    // (unchanged for 600 ms, not the previous job's JD) are the evidence.
+    if (!detail.title) return !!detail.newLayout && !!detail.jd;
     if (!card) return true;   // nothing to compare with
     return titlesMatch(card.title, detail.title);
   }

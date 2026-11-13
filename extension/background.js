@@ -194,7 +194,9 @@ function buildLinkedInHideCss(jobIds) {
   const selectors = ids.flatMap((id) => [
     'li[data-occludable-job-id="' + id + '"]',
     'li.scaffold-layout__list-item:has([data-job-id="' + id + '"])',
-    // AI job search (/jobs/search-results/): the card and the bordered box around it.
+    // AI job search (/jobs/search-results/): the list item (direct child of the results list, three wrappers above
+    // the card), so no empty bordered slot is left behind; the older grandparent rule and the card stay as fallbacks.
+    '[componentkey="SearchResultsMainContent"] > div:has(div[role="button"][componentkey="job-card-component-ref-' + id + '"])',
     'div:has(> div > div[role="button"][componentkey="job-card-component-ref-' + id + '"])',
     'div[role="button"][componentkey="job-card-component-ref-' + id + '"]',
   ]);

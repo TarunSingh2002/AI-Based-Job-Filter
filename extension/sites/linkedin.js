@@ -96,6 +96,7 @@
   let refreshTimer = 0;
   let refreshPending = false;       // a mutation arrived during the throttle window
   let titleTimer = 0;
+  let retryTimer = 0;               // re-runs refresh() once failed title cards may be retried
   let pollTimer = 0;
   let storeQueue = Promise.resolve();
 
@@ -204,7 +205,10 @@
   function listKey() {
     const page = pageLocation();
     const params = page.search.replace(/^\?/, '').split('&')
-      .filter((p) => p && !/^(currentJobId|origin|refresh)=/.test(p));
+      // Click/tracking params change when a card is clicked on the same list; counting them made every click look
+      // like a new list, so the job was never treated as picked (and never went into the partial list).
+      .filter((p) => p && !/^(currentJobId|origin|refresh|eBP|refId|trackingId|lipi|originToLandingJobPostings|referenceJobId|sid|lici)=/.test(p))
+      .sort();
     return page.pathname + '?' + params.join('&');
   }
 
@@ -280,6 +284,7 @@
       location: text(ps[2]),
       promoted: lines.some((t) => /^Promoted\b/.test(t)),
       applied: lines.some((t) => /^Applied(\s+(on|\d|·)|$)/.test(t)),
+      viewed: lines.some((t) => /^Viewed$/.test(t)),   // LinkedIn's own "you opened this job" mark
       dismissed: (card.textContent || '').includes('show you this job again'),
     };
   }
@@ -298,8 +303,11 @@
   }
 
   function readDetail() {
-    const pane = first(document, SEL.detailPane) || document;
-    const titleEl = first(pane, SEL.detailTitle);
+    const classicPane = first(document, SEL.detailPane);
+    const pane = classicPane || document;
+    // Without the classic detail pane (AI-search layout) the generic "h1" / ".t-24" fallbacks would pick up some
+    // unrelated heading on the page; its title then never matches the card and the JD wait always timed out.
+    const titleEl = first(pane, classicPane ? SEL.detailTitle : SEL.detailTitle.slice(0, 1));
     const link = titleEl && (titleEl.closest('a') || titleEl.querySelector('a[href*="/jobs/view/"]'));
     const oldJdEl = first(pane, SEL.jd);
     const jdEl = oldJdEl || newLayoutJd(document);
@@ -342,6 +350,9 @@
     if (li.hideDismissed && info.dismissed) return 'dismissed';
     if (li.promotedMode === 'hide' && info.promoted) return 'promoted';
     if (li.promotedMode === 'partial' && partial.has(partialKey(info.title, info.company))) return 'partial';
+    // Partial with scope "all" = hide every job you opened; LinkedIn's "Viewed" mark says exactly that, even for jobs
+    // opened before the extension saw the click.
+    if (li.promotedMode === 'partial' && li.partialScope === 'all' && info.viewed) return 'partial';
     return null;
   }
 
@@ -448,6 +459,12 @@
         else titleFailed.set(j.job_id, Date.now());
       }
       if (Object.keys(fresh).length) saveVerdicts(fresh);
+    }
+    // Failed cards are only retried by a refresh; on a page nobody touches no mutation would ever trigger one, so
+    // schedule it ourselves.
+    if (jobs.some((j) => titleFailed.has(j.job_id))) {
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(safeRefresh, TITLE_RETRY_MS + 500);
     }
   }
 
@@ -756,6 +773,7 @@
     detachObserver();
     clearTimeout(refreshTimer);
     clearTimeout(titleTimer);
+    clearTimeout(retryTimer);
     refreshTimer = 0;
     refreshPending = false;
     titleKey = '';
@@ -772,6 +790,7 @@
     detachObserver();
     clearTimeout(refreshTimer);
     clearTimeout(titleTimer);
+    clearTimeout(retryTimer);
     openSeq++;
   }
 

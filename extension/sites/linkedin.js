@@ -84,10 +84,8 @@
   let nonJobsPolls = 0;             // polls in a row with the address bar off /jobs/ while running (see tick)
   let panelMissed = false;          // a side-panel write was skipped while this copy didn't own the panel (see tick)
   let currentJobId = null;
-  let currentPicked = false;        // true when the user chose the open job (not LinkedIn's auto-selected first result)
   let openSeq = 0;                  // bumped on every job switch; async work compares its token against it
   let lastHref = null;
-  let openedListKey = null;         // listKey() when the open job was opened
   let seenJd = { jobId: null, jd: '' };   // the last JD read for a job, so the next job can't take it as its own
   let lastHideKey = null;           // sorted ids we last sent with liHide
 
@@ -198,18 +196,6 @@
       id = link ? jobIdFromHref(link.getAttribute('href')) : null;
     }
     return id && /^\d+$/.test(id) ? id : null;   // digits only: the id is used inside a CSS selector below
-  }
-
-  // Which results page we are on, ignoring the open job. "origin" and "refresh" only say how the page was reached.
-  // Search words, filters and the page number ("start") all change this key.
-  function listKey() {
-    const page = pageLocation();
-    const params = page.search.replace(/^\?/, '').split('&')
-      // Click/tracking params change when a card is clicked on the same list; counting them made every click look
-      // like a new list, so the job was never treated as picked (and never went into the partial list).
-      .filter((p) => p && !/^(currentJobId|origin|refresh|eBP|refId|trackingId|lipi|originToLandingJobPostings|referenceJobId|sid|lici)=/.test(p))
-      .sort();
-    return page.pathname + '?' + params.join('&');
   }
 
   function partialKey(title, company) {
@@ -531,8 +517,9 @@
   }
 
   // Remembers the opened job so it is hidden once the user moves on to another one.
+  // Needs the company too: the AI layout's detail pane has no company to read, and a "title|" key matches no card.
   function rememberPartial(info) {
-    if (!info || !info.title || !partialWanted(info)) return;
+    if (!info || !info.title || !info.company || !partialWanted(info)) return;
     const key = partialKey(info.title, info.company);
     if (partial.has(key)) return;
     partial.add(key);
@@ -626,13 +613,14 @@
 
   // Runs once per job switch. `token` goes stale as soon as the user opens something else.
   async function onJobOpened(jobId, token) {
-    const picked = currentPicked;
+    // Every opened job is remembered, also the one LinkedIn opens by itself (first result): it is on screen, and
+    // telling a click from LinkedIn's own pick by the URL kept failing, so clicked jobs never got hidden.
     const card = cardInfoFor(jobId);
-    if (picked) rememberPartial(card);
+    rememberPartial(card);
     const jdOn = jdWanted(card);
     if (!jdOn) clearCurrent();   // no JD verdict will come for this job: don't keep showing the previous one
     // Without a card, title/company only come from the detail pane, so the partial list may still need it.
-    const partialNeedsDetail = !card && picked && partialWanted(null);
+    const partialNeedsDetail = !card && partialWanted(null);
     if (!jdOn && !partialNeedsDetail) return;
 
     const cached = verdicts[jobId];
@@ -646,11 +634,12 @@
     const detail = await waitForDetail(jobId, card, token);
     if (!detail) return;   // user opened another job or left /jobs/
     const job = card || { title: detail.title, company: detail.company, location: '', promoted: false };
-    if (!card && picked) rememberPartial(job);
+    if (!card) rememberPartial(job);
     if (!jdOn) return;
     if (!card && hiddenByRules(job)) return clearCurrent();   // only now do we know its title and company
 
     if (isJdVerdict(verdicts[jobId])) {
+      rememberPartial(job);
       setCurrent(jobId, job, 'done', { verdict: verdicts[jobId] });
       return;
     }
@@ -681,6 +670,9 @@
     const usable = !!verdict && isUsableVerdict(reply);
     // Cache even if the user has moved on: that job may get hidden now, and reopening it is instant.
     if (usable) saveVerdicts({ [jobId]: verdict });
+    // A scored job is in jobs.xlsx: its reposts (same title and company, new job id) must hide. The backend has no
+    // repost list for LinkedIn. (Usually remembered on open already; this covers a card read only now.)
+    if (usable) rememberPartial(job);
 
     // Stale reply: the side panel now belongs to another job, or JD AI was switched off and the panel cleared.
     if (jobId !== currentJobId || !jdWanted(job)) return;
@@ -705,15 +697,8 @@
   function checkCurrentJob() {
     const id = jobIdFromUrl();
     if (id === currentJobId) return;
-    // A user's click changes only the open job on the same results page. LinkedIn itself opens the first result on
-    // page load, a new search or a new results page: the user hasn't chosen that one, so it is not remembered.
-    // Compared with the list the previous job was opened on, so a list change that reaches the URL before
-    // LinkedIn's pick of the first result still counts as a new list.
-    const sameList = currentJobId !== null && listKey() === openedListKey;
     panelMissed = false;   // the new job's own flow below writes the panel
     currentJobId = id;
-    openedListKey = listKey();
-    currentPicked = !!id && (sameList || /^\/jobs\/view\//.test(pageLocation().pathname));   // a job page was opened on purpose
     const token = ++openSeq;
     safeRefresh();   // un-hide the job just opened, hide the one the user just left (if it qualifies)
     if (id) onJobOpened(id, token).catch((err) => log('job flow failed', err));
@@ -779,7 +764,6 @@
     titleKey = '';
     openSeq++;                   // cancels a JD wait in progress
     currentJobId = null;
-    currentPicked = false;
     sendHideSet([]);             // no cards to hide here any more: let background drop this document's CSS
     if (clearPanel) clearCurrent(true);   // forced: onJobsPage is already false, so this copy no longer "owns" it
   }

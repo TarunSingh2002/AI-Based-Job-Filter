@@ -25,7 +25,7 @@ importScripts("common/filters.js", "automation.js"); // JF_DEFAULT_SETTINGS, jfL
 const TIMEOUT_MS = { title: 60000, jd: 60000, health: 5000, stats: 5000, dedupe: 10000 };
 const NAUKRI_JOB_TIMEOUT_MS = 25000;
 const NAUKRI_MAX_TABS = 4; // hard cap, whatever settings.naukri.jdTabs says (the popup allows 1-4)
-const DEDUPE_GROUPS = ["naukri", "glassdoor_indeed"]; // backend repost lists (Glassdoor + Indeed share one)
+const DEDUPE_GROUPS = ["naukri", "glassdoor_indeed", "linkedin"]; // backend repost lists (Glassdoor + Indeed share one)
 const SCRAPER_LABEL = { glassdoor: "Glassdoor", naukri: "Naukri", indeed: "Indeed" }; // sites that notify
 const NOTIFICATION_ID = "jf-scrape"; // one id: a new notification replaces the previous one
 // 48x48 blue tile with a white funnel. Chrome requires an icon for notifications, and this one needs no file.

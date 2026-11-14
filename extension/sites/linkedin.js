@@ -616,6 +616,14 @@
     // Every opened job is remembered, also the one LinkedIn opens by itself (first result): it is on screen, and
     // telling a click from LinkedIn's own pick by the URL kept failing, so clicked jobs never got hidden.
     const card = cardInfoFor(jobId);
+    // A repost: same title + company as a job opened before, under a new job id that was never scored. It is only
+    // on screen because it is open (LinkedIn opened it as the first result, or it was clicked before the list was
+    // hidden), so it gets no JD AI call: no API credit, no second row in jobs.xlsx.
+    if (card && partialWanted(card) && partial.has(partialKey(card.title, card.company)) && !isJdVerdict(verdicts[jobId])) {
+      setCurrent(jobId, card, 'done', { verdict: { decision: 'reject', stage: 'jd', reason: 'repost: already seen (partial list)',
+                                                   confidence: 1, match_score: null } });
+      return;
+    }
     rememberPartial(card);
     const jdOn = jdWanted(card);
     if (!jdOn) clearCurrent();   // no JD verdict will come for this job: don't keep showing the previous one

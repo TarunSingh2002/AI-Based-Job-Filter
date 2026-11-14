@@ -5,7 +5,7 @@ The HTTP server the Chrome extension talks to.
     POST /screen/title   stage 1: a batch of job cards, judged by title (reposts hidden without the AI)
     POST /screen/jd      stage 2: one job, judged by its full description
     GET  /stats          today's CSV row counts per site
-    POST /dedupe/clear   empty one repost list ("naukri" or "glassdoor_indeed")
+    POST /dedupe/clear   empty one repost list ("naukri", "glassdoor_indeed" or "linkedin")
     POST /automation/started    the popup's "Start automation" began a run   -> automation-started.json
     POST /automation/finished   that run ended (summary + one item per search) -> automation-finished.json
     GET  /automation/last       the newest finished marker (the popup's "last run")
@@ -129,7 +129,7 @@ class JdRequest(BaseModel):
 
 
 class DedupeClearRequest(BaseModel):
-    group: Literal["naukri", "glassdoor_indeed"]
+    group: Literal["naukri", "glassdoor_indeed", "linkedin"]
 
 
 class AutomationItem(BaseModel):
@@ -189,6 +189,14 @@ async def screen_jd(req: JdRequest):
     if cached and cached["stage"] == "jd":
         # already done: no AI call, no second CSV row (re-checked against today's experience limit)
         return pick(decide.recheck_years(cached, app.state.profile), JD_RESULT_FIELDS)
+
+    # A repost of a job already screened (LinkedIn opens jobs straight into this stage, with no title stage before
+    # it): hidden without asking the AI and without a CSV row. Naukri/Indeed claimed the key at the title stage
+    # with this same job, so for them this is a no-op.
+    original = claim_or_find_original(req.site, job)
+    if original:
+        log.info("%s jd reject repost of %s %s | %s @ %s", req.site, *original, job["title"], job["company"])
+        return pick(decide.duplicate_verdict(job, *original), JD_RESULT_FIELDS)
 
     if len(job["jd"].strip()) < MIN_JD_CHARS:
         # No usable JD: fall back to the title stage. Its reject stands; a pass becomes "no_jd" and is

@@ -6,14 +6,17 @@ without asking the AI (app.py), so they cost nothing and add no CSV row.
     naukri               -> its own list
     glassdoor + indeed   -> ONE shared list: Glassdoor merged into Indeed (2026-07-01) and a third of
                             Glassdoor's jobs show up on Indeed too
-    linkedin             -> none here (the extension keeps LinkedIn's own partial-hide list)
+    linkedin             -> its own list. LinkedIn screens a job at the JD stage when it is opened (no title stage
+                            first), so app.py checks reposts at both stages.
 
 The lists live in SQLite (store.py, table seen_keys); the popup's "Clear repost list" empties one.
 """
 
 import re
 
-DEDUPE_GROUPS = {"naukri": "naukri", "glassdoor": "glassdoor_indeed", "indeed": "glassdoor_indeed"}
+DEDUPE_GROUPS = {
+    "naukri": "naukri", "glassdoor": "glassdoor_indeed", "indeed": "glassdoor_indeed", "linkedin": "linkedin",
+}
 
 # Legal-form and filler words at the END of a company name: "Acme Technologies Pvt. Ltd." == "ACME".
 COMPANY_SUFFIXES = {

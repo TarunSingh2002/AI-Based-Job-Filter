@@ -31,7 +31,8 @@
   // Every loop stays at >= 300 ms: our work runs on the page's main thread, so it should stay small.
   const POLL_MS = 700;
   const REFRESH_THROTTLE_MS = 300;
-  const TITLE_DEBOUNCE_MS = 800;
+  const TITLE_DEBOUNCE_MS = 400;
+  const JUST_OPENED_MS = 2500;      // how long a card that just turned "Viewed" counts as the open job
   const TITLE_BATCH = 25;
   const TITLE_RETRY_MS = 60000;
   const MAX_VERDICTS = 3000;
@@ -68,6 +69,7 @@
   let loadState = 'cold';           // 'cold' -> 'loading' -> 'ready' (or 'failed'): see loadCache()
   let settings = null;              // deep-merged settings from jfLoadSettings()
   let partial = new Set();          // li_partial.items  ("normTitle|company")
+  const rememberedHere = new Set(); // job ids whose opening added their key to the partial list (not reposts)
   let verdicts = {};                // li_verdicts       (jobId -> verdict)
   const known = new Map();          // jobId -> last card info we could read (LinkedIn empties off-screen cards)
 
@@ -88,6 +90,8 @@
   let lastHref = null;
   let seenJd = { jobId: null, jd: '' };   // the last JD read for a job, so the next job can't take it as its own
   let lastHideKey = null;           // sorted ids we last sent with liHide
+  let justOpened = null;            // card that just turned "Viewed" (being opened); see refresh()
+  let justOpenedAt = 0;
 
   let observer = null;
   let observedNode = null;
@@ -275,6 +279,18 @@
     };
   }
 
+  // readCard() runs querySelectorAll on every card, and refresh() reads every card on each burst of page changes,
+  // which made the list slow on long pages. A card whose text did not change gives the same answer, so reuse it.
+  const cardReads = new WeakMap();   // card element -> { id, sig, info }
+  function readCardCached(li, id) {
+    const sig = (li.textContent || '').length;
+    const hit = cardReads.get(li);
+    if (hit && hit.id === id && hit.sig === sig) return hit.info;
+    const info = readCard(li);
+    cardReads.set(li, { id, sig, info });
+    return info;
+  }
+
   // Card info for one job: the live card if it is rendered, else what we read earlier, else null.
   function cardInfoFor(id) {
     let li = document.querySelector('li[data-occludable-job-id="' + id + '"]') ||
@@ -334,11 +350,13 @@
     if (rule && rule.hide) return rule.reason || 'rule';
     if (li.hideApplied && info.applied) return 'applied';
     if (li.hideDismissed && info.dismissed) return 'dismissed';
-    if (li.promotedMode === 'hide' && info.promoted) return 'promoted';
+    if ((li.promotedMode === 'hide' || li.hidePromoted) && info.promoted) return 'promoted';
     if (li.promotedMode === 'partial' && partial.has(partialKey(info.title, info.company))) return 'partial';
     // Partial with scope "all" = hide every job you opened; LinkedIn's "Viewed" mark says exactly that, even for jobs
     // opened before the extension saw the click.
-    if (li.promotedMode === 'partial' && li.partialScope === 'all' && info.viewed) return 'partial';
+    // Its own reason, not "partial": a viewed card is never a repost (isRepost), so the job you just clicked - which
+    // LinkedIn marks "Viewed" at once - is not hidden under your cursor and then shown again.
+    if (li.promotedMode === 'partial' && li.partialScope === 'all' && info.viewed) return 'viewed';
     return null;
   }
 
@@ -356,18 +374,28 @@
     const hide = new Set();
     const unscreened = [];
     const openNow = jobIdFromUrl();   // currentJobId can lag the URL by one poll; the job just clicked counts as open too
+    const now = Date.now();
     const cards = document.querySelectorAll(SEL.card);
     for (const li of cards) {
       try {
         const id = cardId(li);
         if (!id) continue;
-        const fresh = readCard(li);
+        const before = known.get(id);
+        const fresh = readCardCached(li, id);
         if (fresh) known.set(id, fresh);
-        const info = fresh || known.get(id);
+        const info = fresh || before;
+        // LinkedIn marks a card "Viewed" the moment it is clicked, often before the address bar names it: that card
+        // is the one being opened, so it stays on screen instead of hiding and coming back.
+        if (fresh && fresh.viewed && before && !before.viewed) {
+          justOpened = id;
+          justOpenedAt = now;
+        }
         const reason = info ? localHideReason(info) : null;
-        const isOpen = id === currentJobId || id === openNow;
-        // Never hide the job the user is looking at; it gets hidden after they open another one.
-        if (!isOpen && (reason || aiRejected(id))) hide.add(id);
+        const isOpen = id === currentJobId || id === openNow || (id === justOpened && now - justOpenedAt < JUST_OPENED_MS);
+        // The job the user is looking at stays visible (it hides once they open another one) - except a promoted job
+        // or a repost: LinkedIn opens the first result by itself, and those must not show up even then.
+        if (reason && isOpen && (reason === 'promoted' || isRepost(id, reason))) hide.add(id);
+        else if (!isOpen && (reason || aiRejected(id))) hide.add(id);
         // The open job gets the JD stage, so a title call for it would be wasted (and would race the JD verdict).
         const jdWillScore = isOpen && aiOn('jdAI');
         if (fresh && !reason && !jdWillScore && !verdicts[id] && !titleInFlight.has(id) && !titleFailedRecently(id)) {
@@ -406,17 +434,19 @@
 
   // Restarts the debounce only when the set of unscreened cards changed, so unrelated page mutations
   // cannot postpone the AI call forever.
+  // The timer is NOT restarted on every change: on page 2 LinkedIn fills the cards in over a second or two, and a
+  // debounce that restarted each time never fired until the list sat still. Now the first new card starts one short
+  // wait, and the batch takes every unscreened card on the page when it fires.
   function queueTitleJobs(jobs) {
     titleQueue = jobs;
     const key = jobs.map((j) => j.job_id).join(',');
     if (key === titleKey) return;
     titleKey = key;
-    clearTimeout(titleTimer);
-    if (jobs.length && aiOn('titleAI')) {
-      titleTimer = setTimeout(() => {
-        runTitleAI().catch((err) => log('title AI failed', err));
-      }, TITLE_DEBOUNCE_MS);
-    }
+    if (!jobs.length || !aiOn('titleAI') || titleTimer) return;
+    titleTimer = setTimeout(() => {
+      titleTimer = 0;
+      runTitleAI().catch((err) => log('title AI failed', err));
+    }, TITLE_DEBOUNCE_MS);
   }
 
   // A failed card waits a minute before it is tried again: LinkedIn is a single-page app, so without a retry a
@@ -430,8 +460,13 @@
     if (!onJobsPage || !aiOn('titleAI')) return;
     const jobs = titleQueue.filter((j) => !verdicts[j.job_id] && !titleInFlight.has(j.job_id) && !titleFailedRecently(j.job_id));
     jobs.forEach((j) => titleInFlight.add(j.job_id));
-    for (let i = 0; i < jobs.length; i += TITLE_BATCH) {
-      const batch = jobs.slice(i, i + TITLE_BATCH);
+    // Cards that showed up while this wait ran get their own batch at once; a queue that didn't change wouldn't
+    // re-arm the timer otherwise.
+    titleKey = '';
+    const batches = [];
+    for (let i = 0; i < jobs.length; i += TITLE_BATCH) batches.push(jobs.slice(i, i + TITLE_BATCH));
+    // All batches at once (the backend limits how many reach the AI): one slow batch no longer holds up the rest.
+    await Promise.all(batches.map(async (batch) => {
       const reply = await send({ type: 'screenTitle', site: 'linkedin', jobs: batch });
       const fresh = {};
       // On {error} nothing is stored, so nothing gets hidden: never hide on error.
@@ -445,7 +480,7 @@
         else titleFailed.set(j.job_id, Date.now());
       }
       if (Object.keys(fresh).length) saveVerdicts(fresh);
-    }
+    }));
     // Failed cards are only retried by a refresh; on a page nobody touches no mutation would ever trigger one, so
     // schedule it ourselves.
     if (jobs.some((j) => titleFailed.has(j.job_id))) {
@@ -508,6 +543,12 @@
     return kept;
   }
 
+  // A card matching the partial list that is not the job that put its title + company there: a repost (new job id,
+  // never scored). The original was scored when it was opened (or is the one this tab just remembered).
+  function isRepost(id, reason) {
+    return reason === 'partial' && !rememberedHere.has(id) && !isJdVerdict(verdicts[id]);
+  }
+
   // ---- the open job: partial list + JD AI ---------------------------------------------------------------
 
   // `info` may be null when the job has no card; then only scope "all" can apply (we can't tell if it's promoted).
@@ -518,10 +559,11 @@
 
   // Remembers the opened job so it is hidden once the user moves on to another one.
   // Needs the company too: the AI layout's detail pane has no company to read, and a "title|" key matches no card.
-  function rememberPartial(info) {
+  function rememberPartial(info, jobId) {
     if (!info || !info.title || !info.company || !partialWanted(info)) return;
     const key = partialKey(info.title, info.company);
     if (partial.has(key)) return;
+    if (jobId) rememberedHere.add(jobId);
     partial.add(key);
     queueStore(async () => {
       const data = await chrome.storage.local.get('li_partial');
@@ -562,7 +604,7 @@
   // "partial" doesn't count: that list holds jobs opened before, and opening one again is no reason to skip it.
   function hiddenByRules(info) {
     const reason = info ? localHideReason(info) : null;
-    return !!reason && reason !== 'partial';
+    return !!reason && reason !== 'partial' && reason !== 'viewed';
   }
 
   // JD AI scores the open job unless it is switched off or our own rules would hide the job.
@@ -624,7 +666,7 @@
                                                    confidence: 1, match_score: null } });
       return;
     }
-    rememberPartial(card);
+    rememberPartial(card, jobId);
     const jdOn = jdWanted(card);
     if (!jdOn) clearCurrent();   // no JD verdict will come for this job: don't keep showing the previous one
     // Without a card, title/company only come from the detail pane, so the partial list may still need it.
@@ -642,12 +684,12 @@
     const detail = await waitForDetail(jobId, card, token);
     if (!detail) return;   // user opened another job or left /jobs/
     const job = card || { title: detail.title, company: detail.company, location: '', promoted: false };
-    if (!card) rememberPartial(job);
+    if (!card) rememberPartial(job, jobId);
     if (!jdOn) return;
     if (!card && hiddenByRules(job)) return clearCurrent();   // only now do we know its title and company
 
     if (isJdVerdict(verdicts[jobId])) {
-      rememberPartial(job);
+      rememberPartial(job, jobId);
       setCurrent(jobId, job, 'done', { verdict: verdicts[jobId] });
       return;
     }
@@ -678,9 +720,9 @@
     const usable = !!verdict && isUsableVerdict(reply);
     // Cache even if the user has moved on: that job may get hidden now, and reopening it is instant.
     if (usable) saveVerdicts({ [jobId]: verdict });
-    // A scored job is in jobs.xlsx: its reposts (same title and company, new job id) must hide. The backend has no
-    // repost list for LinkedIn. (Usually remembered on open already; this covers a card read only now.)
-    if (usable) rememberPartial(job);
+    // A scored job is in jobs.xlsx: its reposts (same title and company, new job id) must hide. (Usually remembered
+    // on open already; this covers a card read only now. The backend's repost list catches what slips through.)
+    if (usable) rememberPartial(job, jobId);
 
     // Stale reply: the side panel now belongs to another job, or JD AI was switched off and the panel cleared.
     if (jobId !== currentJobId || !jdWanted(job)) return;
@@ -704,7 +746,7 @@
 
   function checkCurrentJob() {
     const id = jobIdFromUrl();
-    if (id === currentJobId) return;
+    if (id === currentJobId) return safeRefresh();   // same job, new page of results (page 2): new cards to read
     panelMissed = false;   // the new job's own flow below writes the panel
     currentJobId = id;
     const token = ++openSeq;
@@ -720,7 +762,13 @@
       refreshPending = true;
       return;
     }
-    safeRefresh();
+    // A click changes the address bar and the page together: pick up the new job now instead of on the next
+    // 700 ms poll, so the clicked card never counts as "not open" for a moment (checkCurrentJob refreshes too).
+    if (!syncUrl()) safeRefresh();
+    armRefreshThrottle();
+  }
+
+  function armRefreshThrottle() {
     refreshTimer = setTimeout(() => {
       refreshTimer = 0;
       if (refreshPending) {
@@ -768,6 +816,7 @@
     clearTimeout(titleTimer);
     clearTimeout(retryTimer);
     refreshTimer = 0;
+    titleTimer = 0;
     refreshPending = false;
     titleKey = '';
     openSeq++;                   // cancels a JD wait in progress
@@ -836,12 +885,20 @@
         else clearCurrent();
       }
       attachObserver();
-      if (page.href === lastHref) return;
-      lastHref = page.href;
-      checkCurrentJob();
+      syncUrl();
     } catch (err) {
       log('tick failed', err);
     }
+  }
+
+  // True when the address bar changed (and the open job was re-checked, which also refreshes the hide set).
+  function syncUrl() {
+    if (!onJobsPage) return false;
+    const href = pageLocation().href;
+    if (href === lastHref) return false;
+    lastHref = href;
+    checkCurrentJob();
+    return true;
   }
 
   async function onStorageChanged(changes, area) {

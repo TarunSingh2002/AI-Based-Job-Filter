@@ -17,6 +17,7 @@ const JF_DEFAULT_SETTINGS = {
   linkedin: {
     promotedMode: "partial",      // "show" | "hide" | "partial"
     partialScope: "all",          // "all" = every job you open is remembered; "promoted" = only promoted ones
+    hidePromoted: true,           // with "partial" (or "show"): still hide every promoted job, opened or not
     hideApplied: true,
     hideDismissed: true,
     titleAI: true,

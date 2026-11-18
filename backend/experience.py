@@ -103,6 +103,27 @@ def parse_job_years(experience_text: str | None, jd: str | None = None) -> tuple
     return parse_experience(experience_text) or parse_experience(jd)
 
 
+# Inside a job TITLE a bare "7+ years" / "(5 Yrs)" is always the experience asked for (titles never describe the
+# company), so the "experience" word the JD patterns need is not required here. "2 year contract" still doesn't count.
+TITLE_YEARS = re.compile(rf"{NUM}\s*(?:\+|plus)?\s*{UNIT}", re.I)
+
+
+def parse_title_years(title: str | None) -> tuple[int, int | None] | None:
+    """Years asked for in a job title: "Data Engineer 7+ years" -> (7, None), "Data Engineer 5-8 yrs" -> (5, 8)."""
+    if not title:
+        return None
+    found = parse_experience(title)
+    if found:
+        return found
+    title = DASH_LOOKALIKES.sub("-", title)
+    if NOT_EXPERIENCE.search(title):
+        return None
+    mins = {int(float(m.group(1))) for m in TITLE_YEARS.finditer(title)
+            if not CEILING_BEFORE.search(title[max(0, m.start(1) - 20):m.start(1)])}   # "up to 3 yrs" is no minimum
+    mins = {y for y in mins if y <= MAX_SANE_YEARS}
+    return (mins.pop(), None) if len(mins) == 1 else None
+
+
 def _find_requirements(text: str) -> list[tuple[int, int | None]]:
     """Every experience mention in the text as (min, max). One mention can match several patterns
     ("3-8 years of experience" also contains "8 years of experience"), so overlapping matches count once:

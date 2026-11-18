@@ -14,7 +14,7 @@ skills can be learned. The skills answer only feeds the match score that sorts j
 import re
 
 from config import Profile
-from experience import parse_experience, parse_job_years
+from experience import parse_experience, parse_job_years, parse_title_years
 from providers.base import Answer
 from questions import MIN_YEARS_VALUE, SKILLS_LEVELS
 
@@ -117,13 +117,19 @@ def role_split(role: Answer, profile: Profile) -> tuple[float, float, str]:
     return wanted, unwanted, top_unwanted
 
 
+def card_years(job: dict) -> tuple[int | None, int | None]:
+    """Years asked for, read from the card alone: the site's experience field, else the title itself
+    ("Data Engineer 7+ years" - LinkedIn cards have no experience field, so this is their only source)."""
+    return parse_experience(job.get("experience_text")) or parse_title_years(job.get("title")) or (None, None)
+
+
 def check_title_words(job: dict, profile: Profile) -> dict | None:
     """Stage 1, part 1 - BEFORE the AI: too many years on the card or, only when profile.yaml sets
     allowed_seniority, a seniority word in the title. Both are read by code, so they are certain and reject
     the job whatever type of work it is: no need to pay the AI to ask. Returns that reject verdict, or
     None = nothing found, ask the AI (decide_title)."""
     seniority = title_seniority(job["title"]) if profile.allowed_seniority else None
-    min_years, max_years = parse_experience(job.get("experience_text")) or (None, None)
+    min_years, max_years = card_years(job)
     if seniority and seniority not in profile.allowed_seniority:
         reason = f"{SENIORITY_REASON}{seniority}"
     elif _needs_too_many_years(min_years, profile):
@@ -138,7 +144,7 @@ def decide_title(job: dict, answers: dict[str, Answer], profile: Profile) -> dic
     when the AI is sure. Otherwise on to the JD stage."""
     role = answers["role_family"]
     wanted, unwanted, top_unwanted = role_split(role, profile)
-    min_years, max_years = parse_experience(job.get("experience_text")) or (None, None)
+    min_years, max_years = card_years(job)
     fields = {"role_family": role.choice, "min_years": min_years, "max_years": max_years}
 
     if unwanted >= profile.reject_confidence:

@@ -164,17 +164,21 @@ async function applyLinkedInHide(sender, jobIds) {
   // Target the sender's document, not "whatever is in the tab now": a late message from a page that was
   // just reloaded must fail, instead of landing in the new page where nothing would ever remove it.
   const target = { tabId, documentIds: [documentId] };
-  if (previous) {
-    try {
-      await chrome.scripting.removeCSS({ target, css: previous, origin: "USER" });
-    } catch (_) {
-      // That document is gone: nothing to undo.
-    }
-  }
-  let applied = "";
+  // New sheet FIRST, old one after: removing first left a moment with no sheet at all, in which every hidden
+  // card flashed back into the list.
+  let applied = previous;
   try {
     if (css) await chrome.scripting.insertCSS({ target, css, origin: "USER" });
     applied = css;
+    if (previous) {
+      try {
+        await chrome.scripting.removeCSS({ target, css: previous, origin: "USER" });
+      } catch (_) {
+        // That document is gone: nothing to undo.
+      }
+    }
+  } catch (_) {
+    applied = ""; // the document is gone (or the insert failed): nothing of ours is left in it
   } finally {
     // Record what is really in that page now (even if the insert failed) so the next call never skips it.
     delete pages[documentId]; // re-added below, so it becomes the newest entry
@@ -191,15 +195,20 @@ function buildLinkedInHideCss(jobIds) {
   // LinkedIn job ids are numbers; stripping anything else means a weird id can never break the CSS.
   const ids = [...new Set((jobIds || []).map((id) => String(id).replace(/[^A-Za-z0-9_-]/g, "")).filter(Boolean))];
   if (!ids.length) return "";
-  const selectors = ids.flatMap((id) => [
-    'li[data-occludable-job-id="' + id + '"]',
-    'li.scaffold-layout__list-item:has([data-job-id="' + id + '"])',
+  // One :is() list per shape instead of five rules per id: LinkedIn's list re-renders constantly and every :has()
+  // rule is re-checked on each style recalc. The old catch-all "div:has(> div > div[...])" was tested against every
+  // <div> on the page and made the job list slow, so it is gone (the list-item and card rules cover that case).
+  const classic = ids.map((id) => '[data-job-id="' + id + '"]').join(",");
+  const cards = ids.map((id) => '[componentkey="job-card-component-ref-' + id + '"]').join(",");
+  const selectors = [
+    "li:is(" + ids.map((id) => '[data-occludable-job-id="' + id + '"]').join(",") + ")",
+    "li.scaffold-layout__list-item:has(:is(" + classic + "))",
     // AI job search (/jobs/search-results/): the list item (direct child of the results list, three wrappers above
-    // the card), so no empty bordered slot is left behind; the older grandparent rule and the card stay as fallbacks.
-    '[componentkey="SearchResultsMainContent"] > div:has(div[role="button"][componentkey="job-card-component-ref-' + id + '"])',
-    'div:has(> div > div[role="button"][componentkey="job-card-component-ref-' + id + '"])',
-    'div[role="button"][componentkey="job-card-component-ref-' + id + '"]',
-  ]);
+    // the card), so no empty bordered slot is left behind; the card itself stays as the fallback.
+    '[componentkey="SearchResultsMainContent"] > div:has(div[role="button"]:is(' + cards + "))",
+    '[componentkey="SearchResultsMainContent"] div:has(> div > div[role="button"]:is(' + cards + "))",
+    'div[role="button"]:is(' + cards + ")",
+  ];
   return selectors.join(",\n") + " {display:none !important}";
 }
 

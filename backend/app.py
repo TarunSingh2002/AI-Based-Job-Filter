@@ -257,6 +257,11 @@ async def title_verdict(site: str, job: dict) -> dict:
     Steps 1-3 have no await in between, so of two copies in one batch the first claims, the second is a repost."""
     cached = app.state.store.get_verdict(site, job["job_id"])
     if cached and not decide.outdated_seniority_reject(cached, app.state.profile):
+        if cached.get("min_years") is None:
+            # Judged before titles were read for years ("Data Engineer 7+ years" passed): read them now.
+            min_years, max_years = decide.card_years(job)
+            if min_years is not None:
+                cached = {**cached, "min_years": min_years, "max_years": max_years}
         return decide.recheck_years(cached, app.state.profile)
     original = claim_or_find_original(site, job)
     if original:

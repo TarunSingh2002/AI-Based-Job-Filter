@@ -48,20 +48,27 @@
   // whose classes are hashed (e.g. "jkelje jkelo5") and change on every build. For the AI layout we only use its
   // stable hooks: componentkey="job-card-component-ref-<id>" on each card, componentkey="SearchResultsMainContent"
   // on the list, and data-testid="expandable-text-box" under the "About the job" heading.
+  // Third layout: the logged-out (guest) job search at /jobs/search/, used because a logged-in account may be moved to
+  // the AI search for good. Each result is an <li> of ul.jobs-search__results-list holding a .base-search-card with
+  // data-entity-urn="urn:li:jobPosting:<id>"; the open job is drawn in .details-pane__content (top card + JD).
   const NEW_CARD = 'div[role="button"][componentkey^="job-card-component-ref-"]';
   const NEW_CARD_ID = /^job-card-component-ref-(\d+)$/;
+  const GUEST_LIST = 'ul.jobs-search__results-list';
+  const GUEST_CARD = GUEST_LIST + ' > li';
+  const GUEST_URN = /^urn:li:jobPosting:(\d+)$/;
   const SEL = {
-    list: '.scaffold-layout__list, [componentkey="SearchResultsMainContent"]',
-    card: 'li.scaffold-layout__list-item, li[data-occludable-job-id], ' + NEW_CARD,
+    list: '.scaffold-layout__list, [componentkey="SearchResultsMainContent"], ' + GUEST_LIST,
+    card: 'li.scaffold-layout__list-item, li[data-occludable-job-id], ' + NEW_CARD + ', ' + GUEST_CARD,
     cardTitle: ['.job-card-list__title--link', 'a[href*="/jobs/view/"]'],
     cardCompany: ['.artdeco-entity-lockup__subtitle span', '.artdeco-entity-lockup__subtitle'],
     cardLocation: ['.artdeco-entity-lockup__caption', '.job-card-container__metadata-item'],
     cardFooterItem: '.job-card-container__footer-item',
     cardJobState: '.job-card-container__footer-job-state',
-    detailPane: ['.scaffold-layout__detail', '.jobs-search__job-details--container'],
-    detailTitle: ['.job-details-jobs-unified-top-card__job-title', '.t-24', 'h1'],
-    detailCompany: ['.job-details-jobs-unified-top-card__company-name'],
-    jd: ['#job-details', '.jobs-description__content', '.jobs-description-content__text', '.jobs-box__html-content'],
+    detailPane: ['.scaffold-layout__detail', '.jobs-search__job-details--container', '.details-pane__content'],
+    detailTitle: ['.job-details-jobs-unified-top-card__job-title', '.top-card-layout__title', '.t-24', 'h1'],
+    detailCompany: ['.job-details-jobs-unified-top-card__company-name', '.topcard__org-name-link'],
+    jd: ['#job-details', '.jobs-description__content', '.jobs-description-content__text', '.jobs-box__html-content',
+         '.show-more-less-html__markup'],
   };
 
   // ---- state -------------------------------------------------------------------------------------------
@@ -124,8 +131,9 @@
     return 'https://www.linkedin.com/jobs/view/' + id + '/';
   }
 
+  // "/jobs/view/4491804629/" (logged in) or "/jobs/view/ml-engineer-at-acme-4491804629?..." (guest: a slug ending in the id).
   function jobIdFromHref(href) {
-    const m = /\/jobs\/view\/(\d+)/.exec(href || '');
+    const m = /\/jobs\/view\/(?:[^/?#]*-)?(\d+)(?=[/?#]|$)/.exec(href || '');
     return m ? m[1] : null;
   }
 
@@ -228,9 +236,18 @@
 
   // ---- reading cards and the detail pane (read-only) ----------------------------------------------------
 
+  function guestCardEl(li) {
+    return li.querySelector('[data-entity-urn^="urn:li:jobPosting:"]');
+  }
+
   function cardId(li) {
     const key = NEW_CARD_ID.exec(li.getAttribute('componentkey') || '');
     if (key) return key[1];
+    const guest = guestCardEl(li);
+    if (guest) {
+      const urn = GUEST_URN.exec(guest.getAttribute('data-entity-urn') || '');
+      return urn ? urn[1] : null;
+    }
     const own = li.getAttribute('data-occludable-job-id');
     if (own) return own;
     const inner = li.querySelector('[data-job-id]');
@@ -240,6 +257,7 @@
   // Returns null when LinkedIn has emptied the card (off-screen cards stay in the list as bare <li> placeholders).
   function readCard(li) {
     if (li.matches(NEW_CARD)) return readNewCard(li);
+    if (li.matches(GUEST_CARD)) return readGuestCard(li);
     const link = first(li, SEL.cardTitle);
     // The title link also holds a visually-hidden copy ("... with verification"); <strong> has the clean title.
     const title = text(link && (link.querySelector('strong') || link.querySelector('span[aria-hidden="true"]') || link));
@@ -279,6 +297,23 @@
     };
   }
 
+  // Guest card: h3 title, h4 company, location span. Logged out, LinkedIn shows no "Promoted", "Applied" or "Viewed"
+  // marks, so those are always false here (partial hide still works: it remembers each job you open).
+  function readGuestCard(li) {
+    const title = text(li.querySelector('.base-search-card__title'));
+    const company = text(li.querySelector('.base-search-card__subtitle'));
+    if (!title || !company) return null;
+    return {
+      title,
+      company,
+      location: text(li.querySelector('.job-search-card__location')),
+      promoted: false,
+      applied: false,
+      viewed: false,
+      dismissed: false,
+    };
+  }
+
   // readCard() runs querySelectorAll on every card, and refresh() reads every card on each burst of page changes,
   // which made the list slow on long pages. A card whose text did not change gives the same answer, so reuse it.
   const cardReads = new WeakMap();   // card element -> { id, sig, info }
@@ -296,7 +331,8 @@
     let li = document.querySelector('li[data-occludable-job-id="' + id + '"]') ||
              document.querySelector('div[role="button"][componentkey="job-card-component-ref-' + id + '"]');
     if (!li) {
-      const inner = document.querySelector('[data-job-id="' + id + '"]');
+      const inner = document.querySelector('[data-job-id="' + id + '"]') ||
+                    document.querySelector(GUEST_CARD + ' [data-entity-urn="urn:li:jobPosting:' + id + '"]');
       li = inner && inner.closest('li');
     }
     const info = li && readCard(li);
@@ -694,7 +730,12 @@
       return;
     }
     if (!detail.jd) {
-      setCurrent(jobId, job, 'error', { error: 'job description not found on the page' });
+      // Logged out, LinkedIn often refuses the job details (HTTP 429, too many requests) and the right pane stays empty.
+      const error = document.querySelector(GUEST_LIST)
+        ? 'LinkedIn did not load the job description while logged out (its guest limit). Open the job in your ' +
+          'logged-in window to score it, or try again in a few minutes.'
+        : 'job description not found on the page';
+      setCurrent(jobId, job, 'error', { error });
       return;
     }
     if (jdInFlight.has(jobId)) {

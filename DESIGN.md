@@ -511,6 +511,14 @@ It only READS the DOM and sends messages to background.
   Title `.job-card-list__title--link` (fallback `a[href*="/jobs/view/"]`), company `.artdeco-entity-lockup__subtitle span`.
   Promoted: any `.job-card-container__footer-item` text includes "Promoted". Applied: `.job-card-container__footer-job-state` includes "Applied".
   Dismissed: card text includes "show you this job again".
+- Guest (logged-out) job search at `/jobs/search/`, for accounts LinkedIn moved to the AI search for good: cards are the
+  `<li>` of `ul.jobs-search__results-list`, job id from the card's `data-entity-urn="urn:li:jobPosting:<id>"`, title
+  `.base-search-card__title`, company `.base-search-card__subtitle`, location `.job-search-card__location`; no
+  Promoted / Applied / Viewed marks (always false). Open job: `?currentJobId=` as usual; detail pane `.details-pane__content`
+  (title `.top-card-layout__title` inside `a.topcard__link` to `/jobs/view/<slug>-<id>`, company `.topcard__org-name-link`,
+  JD `.show-more-less-html__markup`). LinkedIn often answers the guest JD request with HTTP 429: the pane stays empty and
+  the side panel says to open the job in the logged-in window. Hide CSS: `ul.jobs-search__results-list > li:has(<urn>)`.
+  Links sent to the backend stay `https://www.linkedin.com/jobs/view/<id>/` (opens fine logged in).
 - Frames: since 2026 LinkedIn draws classic job search inside a same-origin frame (`/preload/?_bprMode=vanilla`) whose
   own URL never changes. The script runs in every LinkedIn frame (all_frames). A copy STARTS only when the address bar
   (`window.top.location`, same-origin, read-only) shows `/jobs/` AND its own document holds the jobs UI (list / card /

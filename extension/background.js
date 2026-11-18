@@ -190,7 +190,7 @@ async function applyLinkedInHide(sender, jobIds) {
 }
 
 // One rule hiding every given card. Classic search: some cards carry the id on the <li>, others only on an
-// inner element. AI search: the id is in the card's componentkey.
+// inner element. AI search: the id is in the card's componentkey. Guest search: in the card's data-entity-urn.
 function buildLinkedInHideCss(jobIds) {
   // LinkedIn job ids are numbers; stripping anything else means a weird id can never break the CSS.
   const ids = [...new Set((jobIds || []).map((id) => String(id).replace(/[^A-Za-z0-9_-]/g, "")).filter(Boolean))];
@@ -208,6 +208,9 @@ function buildLinkedInHideCss(jobIds) {
     '[componentkey="SearchResultsMainContent"] > div:has(div[role="button"]:is(' + cards + "))",
     '[componentkey="SearchResultsMainContent"] div:has(> div > div[role="button"]:is(' + cards + "))",
     'div[role="button"]:is(' + cards + ")",
+    // Logged-out (guest) job search: the list item that holds the card with this job's urn.
+    "ul.jobs-search__results-list > li:has(:is(" +
+      ids.map((id) => '[data-entity-urn="urn:li:jobPosting:' + id + '"]').join(",") + "))",
   ];
   return selectors.join(",\n") + " {display:none !important}";
 }

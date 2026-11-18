@@ -123,6 +123,12 @@ Something not working as expected? See "Sending a debug log" below.
 3. Partial hide: every job you open is remembered (company + title). It stays visible while you're on it and
    disappears once you open another job; copies of it disappear everywhere. The side panel asks once per browser
    session whether to **Keep** or **Clear** that list.
+4. Logged out (guest search): if your account only gets LinkedIn's AI job search, search in an **Incognito window
+   without logging in**, e.g. `https://www.linkedin.com/jobs/search/?keywords=AI%20Engineer&location=India&f_TPR=r86400&f_E=2%2C3`
+   (past 24 hours, entry + associate). One-time setup: `chrome://extensions` → Job Filter v2 → **Details** →
+   turn on **Allow in Incognito**. Filtering, title AI and partial hide work as usual. Logged out, LinkedIn often
+   refuses to load the job description (too many requests); then the side panel says so. Open that job's link in your
+   normal logged-in window to score it (it lands in jobs.xlsx from there) and apply.
 
 ## 4. Automation: all your saved searches in one go
 

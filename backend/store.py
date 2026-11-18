@@ -83,6 +83,9 @@ class Store:
         self._stale_lock = threading.Lock()
         self._rebuild_lock = threading.Lock()  # one rebuild at a time: they share the file jobs.xlsx.tmp
         self._workbook_warned = False  # see refresh_workbooks
+        # (day folder, kind) -> row_key of every row already in that day's CSVs of that kind. Read from the
+        # files the first time a day+kind is appended to, then kept up to date by _append.
+        self._saved_keys: dict[tuple[Path, str], set] = {}
 
     def close(self) -> None:
         self.db.close()
@@ -162,8 +165,16 @@ class Store:
         path = folder / f"{site}_{kind}.csv"
         _rotate_if_header_changed(path, columns, now)
 
-        is_new = not path.exists() or path.stat().st_size == 0
         row = {"time": now.strftime("%Y-%m-%d %H:%M:%S"), **{k: _excel_safe(v) for k, v in row.items()}}
+        # The same job (title + company + link) already in today's CSVs of this kind, from any site: don't write
+        # it again. Compared after _excel_safe, so it matches the text as it was written to the file.
+        saved = self._day_keys(folder, kind)
+        key = excel.row_key(row)
+        if key in saved:
+            log.info("already in %s/%s: %s @ %s - not written again", folder.name, kind, row["title"], row["company"])
+            return
+
+        is_new = not path.exists() or path.stat().st_size == 0
         # Excel only reads the file as UTF-8 when it starts with a BOM ("utf-8-sig"); write BOM + header once.
         # If the file is open in Excel, Windows locks it and this raises - the caller then caches nothing.
         with open(path, "a", newline="", encoding="utf-8-sig" if is_new else "utf-8") as f:
@@ -171,10 +182,23 @@ class Store:
             if is_new:
                 writer.writeheader()
             writer.writerow(row)
+        saved.add(key)  # only after the write worked: a failed write (file open in Excel) can be retried
         # Only queue the workbook here: a rebuild re-reads the whole day, so one per row would make each
         # screening slower as the day goes on. keep_workbooks_fresh does it a moment later, off the event loop.
         with self._stale_lock:
             self._stale_workbooks.add(folder)
+
+    def _day_keys(self, folder: Path, kind: str) -> set:
+        """row_key of every row in folder's <site>_<kind>*.csv files (all sites, set-aside files too)."""
+        if (folder, kind) not in self._saved_keys:
+            keys = set()
+            for _, path in excel.day_csvs(folder, kind):
+                with open(path, encoding="utf-8-sig", newline="") as f:
+                    keys.update(excel.row_key(r) for r in csv.DictReader(f))
+            # Keep only today's folder: yesterday's keys are never needed again.
+            self._saved_keys = {k: v for k, v in self._saved_keys.items() if k[0] == folder}
+            self._saved_keys[(folder, kind)] = keys
+        return self._saved_keys[(folder, kind)]
 
     # ── Excel workbook ──────────────────────────────────────────────────────────────────────────
 

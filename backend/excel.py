@@ -9,6 +9,9 @@ from that day's CSVs, with real types:
     Matches    every <site>_matches.csv row, best match_score first (ties: highest position_score first)
     Rejected   every <site>_rejected.csv row, newest first
 
+A job appears once per sheet: rows with the same title + company + link (row_key) are shown once, the
+earliest. store.py doesn't write such a repeat in the first place; this also hides older repeats.
+
 The CSVs are read by column NAME, including the <site>_<kind>.before-HHMMSS.csv files store.py set aside
 when the columns changed: a column an older file doesn't have is just an empty cell.
 
@@ -48,12 +51,20 @@ NUMBER_COLUMNS = {"match_score", "position_score", "skills_score", "confidence",
 DAY_CSV_RE = re.compile(r"^(?P<site>[a-z]+)_(?P<kind>matches|rejected)(\.before-[\d-]+)?\.csv$")
 
 
+def row_key(row: dict) -> tuple[str, str, str]:
+    """What makes two rows the same job: title + company + link. Title and company ignore case and extra spaces;
+    the link must match exactly (minus surrounding spaces), because its query can be the job id (Indeed ?jk=)."""
+    def norm(value) -> str:
+        return " ".join(str(value or "").split()).casefold()
+    return norm(row.get("title")), norm(row.get("company")), str(row.get("link") or "").strip()
+
+
 def write_workbook(folder: Path) -> None:
     """Rebuild folder/jobs.xlsx from the CSVs in folder. Raises PermissionError while Excel has it open."""
-    matches = _read_csvs(folder, "matches")
+    matches = _drop_duplicates(_read_csvs(folder, "matches"))
     matches.sort(key=lambda r: (_number(r.get("match_score")) or 0, _number(r.get("position_score")) or 0),
                  reverse=True)
-    rejected = _read_csvs(folder, "rejected")
+    rejected = _drop_duplicates(_read_csvs(folder, "rejected"))
     rejected.sort(key=lambda r: r.get("time", ""), reverse=True)  # "YYYY-MM-DD HH:MM:SS" sorts as text
 
     wb = Workbook()
@@ -90,6 +101,18 @@ def _read_csvs(folder: Path, kind: str) -> list[dict]:
             rows.extend({key: value or "" for key, value in row.items() if key is not None}
                         for row in csv.DictReader(f))
     return rows
+
+
+def _drop_duplicates(rows: list[dict]) -> list[dict]:
+    """One row per row_key: the earliest one. store.py already refuses to write a repeat, so this only hides
+    repeats in rows written before that check existed."""
+    seen, kept = set(), []
+    for row in sorted(rows, key=lambda r: r.get("time", "")):  # "YYYY-MM-DD HH:MM:SS" sorts as text
+        key = row_key(row)
+        if key not in seen:
+            seen.add(key)
+            kept.append(row)
+    return kept
 
 
 def _fill_sheet(ws, name: str, columns: list[tuple[str, int]], rows: list[dict]) -> None:

@@ -40,6 +40,17 @@
         <textarea rows="2" data-setting="global.blacklistCompanies" data-kind="list"
                   placeholder="soul ai, xyz ltd"></textarea>
       </label>
+      <div class="field">
+        <span>Not for me <em>(when the job gives no years of experience)</em></span>
+        <p class="hint">A ticked level in the title is hidden if the job states no experience range. Jobs that do
+          state years are judged on those years. Needs the AI on (checked with the job description).</p>
+        <label class="check"><input type="checkbox" data-setting="global.notForMe.senior"> Senior / Sr</label>
+        <label class="check"><input type="checkbox" data-setting="global.notForMe.lead"> Lead / Principal</label>
+        <label class="check"><input type="checkbox" data-setting="global.notForMe.manager"> Manager / Head</label>
+        <label class="check"><input type="checkbox" data-setting="global.notForMe.director"> Director</label>
+        <label class="check"><input type="checkbox" data-setting="global.notForMe.vp"> AVP / VP</label>
+        <label class="check"><input type="checkbox" data-setting="global.notForMe.cxo"> CEO / CTO / Chief</label>
+      </div>
     </section>
 
     <section class="panel" id="tab-linkedin" hidden>

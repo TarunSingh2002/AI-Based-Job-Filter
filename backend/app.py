@@ -126,6 +126,8 @@ class TitleRequest(BaseModel):
 class JdRequest(BaseModel):
     site: Site
     job: JobWithJd
+    # Ticked "Not for me" levels (popup → Filters): reject such a title when the job gives no years (decide.py).
+    not_for_me: list[str] = []
 
 
 class DedupeClearRequest(BaseModel):
@@ -184,11 +186,13 @@ async def screen_title(req: TitleRequest):
 @app.post("/screen/jd")
 async def screen_jd(req: JdRequest):
     job = req.job.as_dict()
+    job["not_for_me"] = req.not_for_me  # read by decide.decide_jd
 
     cached = app.state.store.get_verdict(req.site, job["job_id"])
     if cached and cached["stage"] == "jd":
-        # already done: no AI call, no second CSV row (re-checked against today's experience limit)
-        return pick(decide.recheck_years(cached, app.state.profile), JD_RESULT_FIELDS)
+        # already done: no AI call, no second CSV row (re-checked against today's experience limit and boxes)
+        verdict = decide.recheck_years(cached, app.state.profile)
+        return pick(decide.apply_not_for_me(verdict, job, req.not_for_me), JD_RESULT_FIELDS)
 
     # A repost of a job already screened (LinkedIn opens jobs straight into this stage, with no title stage before
     # it): hidden without asking the AI and without a CSV row. Naukri/Indeed claimed the key at the title stage

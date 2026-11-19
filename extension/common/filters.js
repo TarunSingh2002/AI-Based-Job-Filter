@@ -13,6 +13,9 @@ const JF_DEFAULT_SETTINGS = {
                         "teaching", "intern", "internship", "annotator", "annotation"],
     whitelistKeywords: [],        // if non-empty, the title must match at least one
     blacklistCompanies: [],       // exact, case-insensitive
+    // "Not for me": a title with this level is rejected when the job states NO years of experience (backend
+    // decide.py). A job that does give years is judged on them as usual.
+    notForMe: { senior: false, lead: true, manager: true, director: true, vp: true, cxo: true },
   },
   linkedin: {
     promotedMode: "partial",      // "show" | "hide" | "partial"

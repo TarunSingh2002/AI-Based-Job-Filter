@@ -40,6 +40,43 @@ ENTRY_WORDS = _title_words(r"junior|jr|freshers?|graduate|trainee|associate|entr
 SENIORITY_REASON = "seniority: "  # reject reason prefix, e.g. "seniority: senior" (also read back from the cache)
 
 
+# "Not for me" levels (popup → Filters, sent with every JD request as not_for_me). A title with one of these words is
+# rejected when the job states NO years of experience: a "Lead" / "Manager" / "VP" post without a range is almost
+# never for someone with 1-2 years. A job that does state years is judged on those years as usual.
+NOT_FOR_ME_WORDS = {
+    "senior": _title_words(r"senior|sr"),
+    "lead": _title_words(r"lead|leader|principal"),
+    "manager": _title_words(r"managers?|head"),
+    "director": _title_words(r"director"),
+    "vp": _title_words(r"vp|avp|svp|evp|vice[\s_-]+president"),
+    "cxo": _title_words(r"ceo|cto|cfo|coo|cio|cdo|cxo|chief"),
+}
+NOT_FOR_ME_REASON = "not for me: "  # reject reason prefix, e.g. "not for me: manager (no years given)"
+
+
+def not_for_me_level(job: dict, levels: list[str]) -> str | None:
+    """The first ticked level whose word is in the title, when neither the card, the JD nor the title states years
+    of experience. None = the rule doesn't apply (nothing ticked, no such word, or years are given)."""
+    title = job.get("title") or ""
+    hit = next((lvl for lvl in levels if lvl in NOT_FOR_ME_WORDS and NOT_FOR_ME_WORDS[lvl].search(title)), None)
+    if not hit:
+        return None
+    if parse_job_years(job.get("experience_text"), job.get("jd")) or parse_title_years(title):
+        return None
+    return hit
+
+
+def apply_not_for_me(verdict: dict, job: dict, levels: list[str]) -> dict:
+    """A pass whose title is a ticked level with no years given becomes a reject. Also run on cached verdicts, so
+    ticking a box hides jobs judged before as well."""
+    if verdict.get("decision") != "pass" or not levels:
+        return verdict
+    level = not_for_me_level(job, levels)
+    if not level:
+        return verdict
+    return {**verdict, "decision": "reject", "reason": f"{NOT_FOR_ME_REASON}{level} (no years given)"}
+
+
 def make_verdict(job: dict, stage: str, decision: str, reason: str, confidence: float = 0.0, **fields) -> dict:
     """Every verdict has the same keys (the API response fields), so nobody has to check for missing ones."""
     verdict = {
@@ -192,6 +229,9 @@ def decide_jd(job: dict, answers: dict[str, Answer], profile: Profile) -> dict:
         return verdict("reject", f"needs {min_years}+ yrs")
     if max_years is not None and max_years < profile.experience_years - profile.experience_tolerance:
         return verdict("reject", f"overqualified (max {max_years} yrs)")
+    level = not_for_me_level(job, job.get("not_for_me") or [])
+    if level:
+        return verdict("reject", f"{NOT_FOR_ME_REASON}{level} (no years given)", 1.0)
     return verdict("pass", f"position {position_score}/5, skills {skills_score}/5")
 
 

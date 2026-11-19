@@ -45,7 +45,12 @@ const DEBUG_TEXT_MAX = 200; // longer strings in an event are cut
 // Each handler gets (msg, sender) and returns the reply (or a promise of it).
 const HANDLERS = {
   screenTitle: (msg) => postToBackend("/screen/title", { site: msg.site, jobs: msg.jobs || [] }, TIMEOUT_MS.title),
-  screenJd: (msg) => postToBackend("/screen/jd", { site: msg.site, job: msg.job }, TIMEOUT_MS.jd),
+  screenJd: async (msg) => {
+    // The ticked "Not for me" levels (popup → Filters) go along: the backend rejects such a title without years.
+    const notForMe = (await jfLoadSettings()).global.notForMe || {};
+    const levels = Object.keys(notForMe).filter((level) => notForMe[level] === true);
+    return postToBackend("/screen/jd", { site: msg.site, job: msg.job, not_for_me: levels }, TIMEOUT_MS.jd);
+  },
   health: () => getFromBackend("/health", TIMEOUT_MS.health),
   stats: () => getFromBackend("/stats", TIMEOUT_MS.stats),
   dedupeClear: (msg) => clearRepostList(msg.group),

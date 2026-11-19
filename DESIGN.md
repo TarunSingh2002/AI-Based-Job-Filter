@@ -563,7 +563,7 @@ It only READS the DOM and sends messages to background.
   markProcessed(el): Promise<void>,          // click the site's own save/bookmark button if not saved
   fetchJd(job): Promise<{jd, blocked}>,      // jd = full JD text ('' if unavailable); blocked = null, or the pause
                                              //   message when the job page was a rate limit / check page (403/429/503/challenge)
-  nextPage(): Promise<"same-page"|"navigating"|"none">,   // load more on same page, or navigate to next URL
+  nextPage(): Promise<"same-page"|{navigate: url}|"none">,   // load more on same page, or the next URL (the engine stores the hand-off, then navigates)
   detectBlock(): string|null,                // captcha / login wall / cloudflare text ON THE RESULTS PAGE → pause reason
   checkSearch?(state): {navigate}|{stop}|null,  // optional page guard (Naukri, below)
   debugInfo?(): object }                     // optional extra fields for the "page.ready" debug-log event (Naukri: total)

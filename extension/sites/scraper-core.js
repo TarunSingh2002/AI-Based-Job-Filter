@@ -34,6 +34,7 @@
 const JFS_TITLE_BATCH = 20; // max jobs per screenTitle call (DESIGN 3.5)
 const JFS_MAX_ERRORS_IN_ROW = 3; // then pause — the backend or the site is probably down
 const JFS_HANDOFF_MS = 60000; // the next page must pick the run up within a minute of the navigation
+const JFS_HANDOFF_WAIT_MS = 8000; // how long a newly loaded page keeps looking for a hand-off that is on its way
 const JFS_JOB_PAGE_TIMEOUT_MS = 20000; // Glassdoor / Indeed job-page fetch gives up after this
 const JFS_MAX_LANES = 4; // at most this many job pages are read at the same time
 const JFS_BACKOFF_SECONDS = [30, 60, 120]; // waits after a blocked job page; still blocked after the last → pause
@@ -456,13 +457,24 @@ const JFScraper = {
   /** On page load: take over the run that the previous page just handed over ("Next page" navigation). */
   async resumeIfRunning(adapter) {
     this.adapter = adapter;
+    if (document.prerendering) {
+      // Chrome rendered this page ahead of time: it is not the page the run navigated to until it is shown.
+      await new Promise((resolve) => document.addEventListener('prerenderingchange', resolve, { once: true }));
+    }
     const first = await this.loadState();
     jfsLog('page.load', { url: location.href, ours: this.isOurRun(first), run: jfsRunSummary(first) });
     if (!this.isOurRun(first)) return; // a paused run waits for the user's Resume
     const hasCards = await jfsWaitFor(() => adapter.findCards().length > 0, 15000, 500);
-    // Read again after the wait: by now the old page's hand-off has surely reached storage.
-    const state = await this.loadState();
-    const handedOver = this.isOurRun(state) && !!state.handoffAt && Date.now() - state.handoffAt < JFS_HANDOFF_MS;
+    const fresh = (s) => this.isOurRun(s) && !!s.handoffAt && Date.now() - s.handoffAt < JFS_HANDOFF_MS;
+    // Read again after the wait. Cards that come with the HTML end the wait at once, so give a hand-off that is
+    // still on its way to storage a few more seconds instead of refusing the run on the first look.
+    let state = await this.loadState();
+    const deadline = Date.now() + JFS_HANDOFF_WAIT_MS;
+    while (!fresh(state) && this.isOurRun(state) && !this.isBusy() && Date.now() < deadline) {
+      await jfsSleep(500);
+      state = await this.loadState();
+    }
+    const handedOver = fresh(state);
     if (!handedOver || this.isBusy()) {
       // not navigated here by the run: leave it alone (the log says why)
       jfsLog('handoff.refused', () => ({
@@ -663,19 +675,23 @@ const JFScraper = {
 
         this.state.pagesDone += 1;
         const result = await this.adapter.nextPage();
-        jfsLog('page.next', { result, page: this.state.page, pagesDone: this.state.pagesDone });
+        const navigateTo = result && typeof result === 'object' ? result.navigate : null;
+        jfsLog('page.next', { result: navigateTo ? 'navigate' : result, page: this.state.page, pagesDone: this.state.pagesDone });
         if (!this.alive(token)) return; // Stop came while Glassdoor was loading more jobs
-        if (result === 'none') {
+        if (result === 'none' || (result && typeof result === 'object' && !navigateTo)) {
           await this.end('no more pages');
           return;
         }
         this.state.page += 1;
-        if (result === 'navigating') {
-          // Hand the run to the next page (resumeIfRunning). save() sends its message right away,
-          // before this page unloads, and the background stores it.
+        if (navigateTo) {
+          // Hand the run to the next page (resumeIfRunning). The hand-off is STORED FIRST and only then do we
+          // leave: navigating first let a fast next page (Indeed / Naukri send their cards with the HTML) read
+          // scrape_state before the hand-off reached it, refuse the run, and leave it "running" with no page.
           this.state.handoffAt = Date.now();
-          jfsLog('handoff.written', { page: this.state.page, why: 'next page' });
-          await this.save();
+          jfsLog('handoff.written', { page: this.state.page, why: 'next page', url: navigateTo });
+          await this.save(); // the background replies once it is in storage
+          if (!this.alive(token)) return; // Stop came during the save: stay here
+          location.href = navigateTo;
           return;
         }
         await this.save();

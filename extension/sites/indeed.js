@@ -138,8 +138,8 @@ const indeedAdapter = {
   async nextPage() {
     const next = document.querySelector(INDEED_SEL.next);
     if (!next || !next.href) return 'none';
-    location.href = next.href; // full page load; the next page resumes the run from scrape_state
-    return 'navigating';
+    // The engine stores the hand-off, then loads this URL; the next page resumes the run from scrape_state.
+    return { navigate: next.href };
   },
 
   detectBlock() {

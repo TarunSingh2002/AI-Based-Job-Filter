@@ -212,9 +212,9 @@ const naukriAdapter = {
     const next = naukriNextLink();
     if (!next) return 'none';
     const url = naukriNextUrl(next);
-    jfsLog('naukri.next', () => ({ result: 'navigating', href: next.getAttribute('href'), url }));
-    location.href = url; // full page load, filters kept; the next page resumes the run from scrape_state
-    return 'navigating';
+    jfsLog('naukri.next', () => ({ result: 'navigate', href: next.getAttribute('href'), url }));
+    // Filters kept. The engine stores the hand-off, then loads this URL; the next page resumes the run from it.
+    return { navigate: url };
   },
 
   /** Extra fields for the engine's "page.ready" debug-log event (DESIGN 3.5). */

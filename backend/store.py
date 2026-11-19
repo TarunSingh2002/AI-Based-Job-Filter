@@ -166,7 +166,7 @@ class Store:
         _rotate_if_header_changed(path, columns, now)
 
         row = {"time": now.strftime("%Y-%m-%d %H:%M:%S"), **{k: _excel_safe(v) for k, v in row.items()}}
-        # The same job (title + company + link) already in today's CSVs of this kind, from any site: don't write
+        # The same job (title + company, any link) already in today's CSVs of this kind, from any site: don't write
         # it again. Compared after _excel_safe, so it matches the text as it was written to the file.
         saved = self._day_keys(folder, kind)
         key = excel.row_key(row)

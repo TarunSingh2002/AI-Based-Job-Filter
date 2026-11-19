@@ -9,8 +9,8 @@ from that day's CSVs, with real types:
     Matches    every <site>_matches.csv row, best match_score first (ties: highest position_score first)
     Rejected   every <site>_rejected.csv row, newest first
 
-A job appears once per sheet: rows with the same title + company + link (row_key) are shown once, the
-earliest. store.py doesn't write such a repeat in the first place; this also hides older repeats.
+A job appears once per sheet: rows with the same title + company (row_key) are shown once, the
+earliest - the same job posted for several cities (Naukri) or on several sites has different links, and is still one job. store.py doesn't write such a repeat in the first place; this also hides older repeats.
 
 The CSVs are read by column NAME, including the <site>_<kind>.before-HHMMSS.csv files store.py set aside
 when the columns changed: a column an older file doesn't have is just an empty cell.
@@ -51,12 +51,13 @@ NUMBER_COLUMNS = {"match_score", "position_score", "skills_score", "confidence",
 DAY_CSV_RE = re.compile(r"^(?P<site>[a-z]+)_(?P<kind>matches|rejected)(\.before-[\d-]+)?\.csv$")
 
 
-def row_key(row: dict) -> tuple[str, str, str]:
-    """What makes two rows the same job: title + company + link. Title and company ignore case and extra spaces;
-    the link must match exactly (minus surrounding spaces), because its query can be the job id (Indeed ?jk=)."""
+def row_key(row: dict) -> tuple[str, str]:
+    """What makes two rows the same job: title + company, ignoring case and extra spaces. NOT the link: Naukri posts
+    one job once per city, each with its own link ("...-gurugram-...", "...-pune-..."), and the same job can come
+    from Indeed and Naukri too. Those are one job: it is kept once, the earliest row."""
     def norm(value) -> str:
         return " ".join(str(value or "").split()).casefold()
-    return norm(row.get("title")), norm(row.get("company")), str(row.get("link") or "").strip()
+    return norm(row.get("title")), norm(row.get("company"))
 
 
 def write_workbook(folder: Path) -> None:
